@@ -1,0 +1,11 @@
+.gocache/
+.env
+var/
+*.db-shm
+*.db-wal
+*.test
+*.prof
+/craggy-agent
+/craggy-agent.exe
+/host
+/host.exe

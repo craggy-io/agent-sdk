@@ -1,0 +1,22 @@
+# Example session config for examples/host (-config) and
+# craggy-agent (--config). Values overlay config.Defaults; named
+# profiles replace same-named defaults. The API key is NOT read from
+# here: it comes from the OPENROUTER_API_KEY environment variable.
+profiles:
+  default:
+    model: anthropic/claude-sonnet-5.5
+    fallbacks: [openai/gpt-5.2]
+    reasoning: {effort: medium}
+    max_output_tokens: 16000
+    parallel_tool_calls: true
+    provider: {require_parameters: true, data_collection: deny}
+    cache: auto
+limits:
+  usd: 5.00
+  wall_clock: 30m
+  steps: 400
+  tool_calls: 1000
+loop:
+  max_steps: 80
+  tool_result_bytes: 32KiB
+  compact_at: 0.8
