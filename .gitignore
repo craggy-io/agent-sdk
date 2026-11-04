@@ -7,5 +7,7 @@ var/
 *.prof
 /craggy-agent
 /craggy-agent.exe
-/host
-/host.exe
+/examples/host/host
+/examples/host/host.exe
+/cmd/craggy-agent/craggy-agent
+/cmd/craggy-agent/craggy-agent.exe
