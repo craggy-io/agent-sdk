@@ -13,8 +13,10 @@ new scripts with no host changes.
   OpenRouter implementation and scripted test providers included.
 - Agents and workflows defined in Starlark, run by
   [script-services](https://github.com/craggy-io/script-services); built-in
-  definitions ship embedded, new definitions load at runtime behind an
-  approval gate.
+  definitions ship embedded, and user and project definitions are
+  bundles (folders with a `bundle.yaml`) loaded and hot-reloaded by
+  [foundation-kit](https://github.com/craggy-io/foundation-kit); new
+  definitions install at runtime behind an approval gate.
 - Durable workflows: a call-key journal in the append-only trace makes
   replay-from-top resume work across restarts, including human `ask` gates.
 - Capabilities managed by
@@ -42,7 +44,7 @@ new scripts with no host changes.
 | `workflow` | Durable Starlark workflows: journal, ask gates, resume |
 | `memory` | Durable memory store exposed as capabilities |
 | `agentcap` | Capability bridge: agents, workflows, LLM and memory in a registry |
-| `defs` | Embedded built-in `.star` agents and workflows |
+| `defs` | The shipped definition bundle: built-in agents, skill and workflows |
 | `cmd/craggy-agent` | Debug CLI over a trace database |
 | `examples/host` | Runnable host wiring registry, MCP, HTTP and scripts |
 
@@ -53,11 +55,16 @@ as `§N`, and [AGENTS.md](AGENTS.md) for the integration guide.
 ## Quick start
 
 ```go
+loader, err := agentdef.Open(ctx, agentdef.Options{
+    Shipped: defs.Source(), // built-in agents, skill and workflows
+    Project: "res",         // optional: a bundle replacing them by name
+})
+if err != nil { return err }
 h, err := host.Open(ctx, host.Options{
     Config:   config.Defaults(),
     Provider: openrouter.New(os.Getenv("OPENROUTER_API_KEY")),
     View:     host.NewRegistryView(view), // a capability-services registry view
-    Defs:     defs.Builtin(),
+    Defs:     loader,
     Trace:    sink,
 })
 if err != nil { return err }
@@ -66,7 +73,25 @@ defer h.Close()
 res, err := h.RunAgent(ctx, "assistant", "Summarise this repository")
 ```
 
-An agent definition is a Starlark file:
+Definitions are bundles. **Every definition folder needs a
+`bundle.yaml`** listing each agent, skill and workflow; its `id` is the
+name, and nothing is discovered from file names:
+
+```yaml
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.project, version: 1.0.0}
+contributions:
+  - {id: reviewer, kind: agentsdk.agent@1, path: agents/reviewer.star}
+  - {id: plan-review, kind: agentsdk.workflow@1, path: workflows/plan-review.star}
+```
+
+Layers are one bundle each: shipped (`defs`), user (`<UserDir>/agentsdk.user`,
+where approved `promote` installs) and project. A higher layer replaces a
+lower one by name; any other shared name is an error. A missing folder is
+skipped, a folder without `bundle.yaml` is an error. See
+[docs/agentdef.md](docs/agentdef.md).
+
+An agent definition is a Starlark file declaring one agent:
 
 ```python
 agent(
@@ -103,8 +128,9 @@ def run(input):
 
 ## Development
 
-Requires Go 1.27 or newer. Dependencies `github.com/craggy-io/script-services`
-and `github.com/craggy-io/capability-services` must be fetchable (set
+Requires Go 1.27 or newer. Dependencies `github.com/craggy-io/foundation-kit`,
+`github.com/craggy-io/script-services` and
+`github.com/craggy-io/capability-services` must be fetchable (set
 `GOPRIVATE=github.com/craggy-io/*` while they are private).
 
 ```sh
@@ -119,8 +145,8 @@ done
 ```
 
 The nested modules carry `replace` directives at this module until
-the first tag; the adapters keep heavy dependencies (SQLite, YAML)
-out of the core module graph.
+the first tag; the adapters keep heavy dependencies (SQLite, config
+YAML) out of the core module graph.
 
 Live OpenRouter tests are skipped unless `OPENROUTER_API_KEY` is set and
 `AGENT_SDK_LIVE=1`.

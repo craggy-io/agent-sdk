@@ -9,29 +9,30 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/craggy-io/foundation-kit/bundle"
+
 	"github.com/craggy-io/agent-sdk/model"
 )
 
-// Resolve resolves a loaded definition by name. vars is exposed to
+// Resolve resolves a catalogued definition by name. vars is exposed to
 // prompt templates as .Vars; a string vars["Date"] overrides .Date
-// (otherwise today, UTC).
+// (otherwise today, UTC). The chain and skills come from one catalog, so
+// a reload in progress never mixes two versions.
 func (l *Loader) Resolve(name string, vars map[string]any) (*Resolved, error) {
-	l.ensureLoaded()
-	l.mu.RLock()
-	d, ok := l.defs[name]
-	l.mu.RUnlock()
+	cat := l.Catalog()
+	d, ok := lookup(cat, AgentKind, name)
 	if !ok {
 		return nil, fmt.Errorf("agentdef: unknown agent %q", name)
 	}
-	chain, err := l.chainOf(d)
+	chain, err := chainOf(cat, d)
 	if err != nil {
 		return nil, err
 	}
-	return l.resolveChain(chain, vars)
+	return resolveChain(cat, chain, vars)
 }
 
 // ResolveDynamic resolves a runtime-built definition. It must extends an
-// existing loaded definition — a variant, not a blank slate.
+// existing catalogued definition — a variant, not a blank slate.
 func (l *Loader) ResolveDynamic(d Definition, vars map[string]any) (*Resolved, error) {
 	if d.Name == "" {
 		return nil, fmt.Errorf("agentdef: dynamic definition needs a name")
@@ -39,29 +40,24 @@ func (l *Loader) ResolveDynamic(d Definition, vars map[string]any) (*Resolved, e
 	if d.Extends == "" {
 		return nil, fmt.Errorf("agentdef: dynamic definition %q must extends an existing definition", d.Name)
 	}
-	l.ensureLoaded()
-	l.mu.RLock()
-	_, ok := l.defs[d.Extends]
-	l.mu.RUnlock()
-	if !ok {
+	cat := l.Catalog()
+	if _, ok := lookup(cat, AgentKind, d.Extends); !ok {
 		return nil, fmt.Errorf("agentdef: dynamic definition %q extends unknown definition %q", d.Name, d.Extends)
 	}
 	if err := ValidateMaxEffect(d.Name, d.Tools.MaxEffect); err != nil {
 		return nil, err
 	}
 	leaf := d
-	chain, err := l.chainOf(&leaf)
+	chain, err := chainOf(cat, &leaf)
 	if err != nil {
 		return nil, err
 	}
-	return l.resolveChain(chain, vars)
+	return resolveChain(cat, chain, vars)
 }
 
 // chainOf returns the inheritance chain root-first, detecting cycles and
 // unknown parents.
-func (l *Loader) chainOf(leaf *Definition) ([]*Definition, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+func chainOf(cat *bundle.Catalog, leaf *Definition) ([]*Definition, error) {
 	var rev []*Definition
 	seen := map[string]int{}
 	cur := leaf
@@ -78,7 +74,7 @@ func (l *Loader) chainOf(leaf *Definition) ([]*Definition, error) {
 		if cur.Extends == "" {
 			break
 		}
-		parent, ok := l.defs[cur.Extends]
+		parent, ok := lookup(cat, AgentKind, cur.Extends)
 		if !ok {
 			return nil, fmt.Errorf("agentdef: %q extends unknown definition %q", cur.Name, cur.Extends)
 		}
@@ -152,7 +148,7 @@ func toolsInheritParent(d *Definition, isRoot bool) bool {
 	return len(t.Include) == 0 && len(t.Exclude) == 0 && t.MaxEffect == "" && len(t.Allow) == 0
 }
 
-func (l *Loader) resolveChain(chain []*Definition, vars map[string]any) (*Resolved, error) {
+func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any) (*Resolved, error) {
 	if vars == nil {
 		vars = map[string]any{}
 	}
@@ -281,22 +277,19 @@ func (l *Loader) resolveChain(chain []*Definition, vars map[string]any) (*Resolv
 	r.SystemPrompt = strings.Join(parts, "\n\n")
 
 	if len(r.Skills) > 0 {
-		l.mu.RLock()
-		var cat strings.Builder
-		cat.WriteString("## Skills\n\nThe following skills are available via the skill tool:\n")
+		var list strings.Builder
+		list.WriteString("## Skills\n\nThe following skills are available via the skill tool:\n")
 		for _, name := range r.Skills {
-			sk, ok := l.skills[name]
+			sk, ok := lookup(cat, SkillKind, name)
 			if !ok {
-				l.mu.RUnlock()
 				return nil, fmt.Errorf("agentdef: %s: unknown skill %q", r.Name, name)
 			}
-			fmt.Fprintf(&cat, "- `%s`: %s\n", sk.Name, sk.Description)
+			fmt.Fprintf(&list, "- `%s`: %s\n", sk.Name, sk.Description)
 		}
-		l.mu.RUnlock()
 		if r.SystemPrompt != "" {
 			r.SystemPrompt += "\n\n"
 		}
-		r.SystemPrompt += strings.TrimRight(cat.String(), "\n")
+		r.SystemPrompt += strings.TrimRight(list.String(), "\n")
 	}
 	return r, nil
 }

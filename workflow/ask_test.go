@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
 	"github.com/craggy-io/agent-sdk/model"
@@ -104,7 +103,7 @@ func TestAskListWaitingFreshSession(t *testing.T) {
 	}
 	s2, err := host.Open(context.Background(), host.Options{
 		Config: config.Defaults(), View: testView(&ran), Provider: &taskProvider{},
-		Defs: agentdef.DirRoots(testRoot(t)), Trace: sink,
+		Defs: openDefs(t, testRoot(t)), Trace: sink,
 	})
 	if err != nil {
 		t.Fatalf("open s2: %v", err)

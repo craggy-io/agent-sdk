@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/agenttest"
 	"github.com/craggy-io/agent-sdk/host"
 	"github.com/craggy-io/agent-sdk/model"
@@ -317,7 +316,7 @@ func TestDelegateKeepsHostContextValues(t *testing.T) {
 		"child":  {builtinCall("c1", "echo", map[string]any{}), text("probed")},
 	})
 	s, err := host.Open(context.Background(), host.Options{
-		View: view, Provider: prov, Defs: agentdef.DirRoots(testRoot(t)), Trace: tracemem.New()})
+		View: view, Provider: prov, Defs: openDefs(t, testRoot(t)), Trace: tracemem.New()})
 	if err != nil {
 		t.Fatal(err)
 	}

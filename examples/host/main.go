@@ -10,6 +10,11 @@
 //	go run . -mcp                         # MCP tools on stdio
 //	go run . -defs ./mydefs -scripts ./caps -trace trace.db -memory ./mem
 //
+// -defs holds the user definition layer, the bundle ./mydefs/agentsdk.user
+// (created by the first approved promote), and -scripts is a bundle of
+// capability scripts. Both folders need a bundle.yaml; see the agentdef
+// and starlarkcap docs.
+//
 // Views are the security story: agents and MCP clients get the agent
 // view (no admin- or host-tagged capabilities, so no promote and no
 // answering their own ask gates); HTTP gets the full view in this
@@ -23,7 +28,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -33,6 +37,8 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/craggy-io/foundation-kit/bundle"
 
 	"github.com/craggy-io/agent-sdk/adapters/configyaml"
 	"github.com/craggy-io/agent-sdk/adapters/tracesqlite"
@@ -81,8 +87,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	addr := flags.String("addr", ":8080", "HTTP listen address")
 	useMCP := flags.Bool("mcp", false, "serve MCP over stdio instead of HTTP")
-	defsDir := flags.String("defs", "", "extra definition root (agents/, skills/, workflows/) shadowing the built-ins; also the promote target")
-	scripts := flags.String("scripts", "", "directory of capability *.star files to load and hot-reload")
+	defsDir := flags.String("defs", "", "user definition folder: the bundle at <defs>/agentsdk.user replaces built-ins by name, and promote installs there")
+	scripts := flags.String("scripts", "", "capability script bundle (a folder whose bundle.yaml lists capability.script@1 files) to load and hot-reload")
 	tracePath := flags.String("trace", "", "SQLite trace file (default: in-memory, no resume across restarts)")
 	memDir := flags.String("memory", "", "durable memory directory (default: in-memory)")
 	cfgPath := flags.String("config", "", "session config YAML (default: built-in defaults)")
@@ -150,13 +156,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if key := os.Getenv("OPENROUTER_API_KEY"); key != "" {
 		prov = openrouter.New(key)
 	}
-	roots := []fs.FS{defs.FS()}
-	if *defsDir != "" {
-		roots = append(roots, os.DirFS(*defsDir))
+	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(), UserDir: *defsDir})
+	if err != nil {
+		return err
 	}
 	h, err := host.Open(ctx, host.Options{
 		Config: cfg, View: host.NewRegistryView(agentView), Provider: prov,
-		Defs: agentdef.Roots(roots...), Trace: sink,
+		Defs: loader, Trace: sink,
 		Caller: model.CallerInfo{ID: "user:local", Kind: "user"},
 	})
 	if err != nil {
@@ -172,13 +178,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 	}
 	if err := agentcap.Register(r, h, agentcap.Options{
-		Root: *defsDir, Approve: approveFn, Memory: mem,
+		Approve: approveFn, Memory: mem,
 	}); err != nil {
 		return err
 	}
 	if *scripts != "" {
 		w, err := starlarkcap.Watch(ctx, r, starlarkcap.WatchOptions{
-			Dir: *scripts,
+			Sources: []bundle.Source{bundle.Dir(*scripts)},
+			OnError: func(err error) { lg.Printf("scripts: reload failed, keeping the previous scripts: %v", err) },
 			OnResult: func(prefix string, l starlarkcap.Loaded, err error) {
 				switch {
 				case err != nil:

@@ -10,7 +10,10 @@ craggy-agent --db trace.db runs|tree <run>|step <step> --context|--diff|tools <n
 ```
 
 Live runs need `OPENROUTER_API_KEY`; definitions come from the
-built-in catalogue shadowed by `--root` (or a nearby `res/`
-directory). Query commands are read-only over a SQLite trace; IDs
+built-in catalogue (the shipped layer), replaced by name by `--root`
+(or a nearby `res/` directory), the project layer. That folder needs a
+`bundle.yaml` with `metadata.id: agentsdk.project` listing its agents,
+skills and workflows (see [agentdef](agentdef.md)); a missing folder
+is skipped, one without `bundle.yaml` is an error. Query commands are read-only over a SQLite trace; IDs
 may be unique prefixes. `step --context` prints the exact rebuilt
 request; `replay --print` shows the body that would be resent.

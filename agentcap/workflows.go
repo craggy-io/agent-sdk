@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/workflow"
 	"github.com/craggy-io/capability-services/registry"
 )
@@ -44,10 +45,10 @@ func (s *service) workflowCaps() []registry.Capability {
 	hostOnly := registry.WithTags("host")
 	return []registry.Capability{
 		registry.Func("workflows.list", "List catalogued workflows",
-			func(_ context.Context, _ struct{}) ([]string, error) {
+			func(ctx context.Context, _ struct{}) ([]string, error) {
 				names := []string{}
 				if s.h.Defs() != nil {
-					s.h.Defs().ReloadIfChanged()
+					_, _ = s.h.Defs().Reload(ctx) // a failed reload keeps the previous catalogue
 					names = append(names, s.h.Defs().Workflows()...)
 				}
 				s.mu.Lock()
@@ -64,7 +65,10 @@ func (s *service) workflowCaps() []registry.Capability {
 				src, ok := s.dynWf[in.Name]
 				s.mu.Unlock()
 				if !ok && s.h.Defs() != nil {
-					src, ok = s.h.Defs().WorkflowSource(in.Name)
+					var wf *agentdef.Workflow
+					if wf, ok = s.h.Defs().Workflow(in.Name); ok {
+						src = wf.Source()
+					}
 				}
 				if !ok {
 					return nil, registry.Errorf(registry.NotFound, "unknown workflow %q", in.Name)
@@ -126,7 +130,7 @@ func (s *service) workflowCaps() []registry.Capability {
 				}
 				return map[string]any{"answered": true, "run_id": in.RunID, "key": in.Key}, nil
 			}, hostOnly, registry.Describe("Host surface: agents can propose but never approve — never in an agent's default tool view.")),
-		registry.Func("workflows.promote", "Persist a dynamic workflow to disk",
+		registry.Func("workflows.promote", "Install a dynamic workflow in the user layer",
 			func(ctx context.Context, in struct {
 				Name   string `json:"name"`
 				Source string `json:"source,omitempty"`

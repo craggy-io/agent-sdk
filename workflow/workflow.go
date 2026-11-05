@@ -22,20 +22,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"strings"
 	"sync"
 
 	"go.starlark.net/starlark"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
 	"github.com/craggy-io/agent-sdk/internal/jschema"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/agent-sdk/trace"
 	"github.com/craggy-io/script-services/dialect"
-	"github.com/craggy-io/script-services/modules"
 	"github.com/craggy-io/script-services/script"
+	"github.com/craggy-io/script-services/starcompile"
 )
 
 // RuntimeVersion is pinned into every wf.start (§6.3); a mismatch on
@@ -101,11 +101,11 @@ func Run(ctx context.Context, s *host.Host, nameOrSource string, input map[strin
 // RunEx is Run with options; it also returns the workflow run ID so the
 // caller can Resume later.
 func RunEx(ctx context.Context, s *host.Host, nameOrSource string, input map[string]any, opts Options) (Result, error) {
-	name, source, err := resolveSource(s, nameOrSource)
+	wf, source, err := resolveSource(ctx, s, nameOrSource)
 	if err != nil {
 		return Result{Status: "failed: workflow_not_found"}, err
 	}
-	return execute(ctx, s, name, source, input, opts)
+	return execute(ctx, s, wf, source, input, opts)
 }
 
 // Resume replays a previous workflow run (§6.3): it loads the pinned
@@ -141,11 +141,16 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 			fmt.Errorf("workflow: resume %s: source hash mismatch", runID)
 	}
 	// A catalogued workflow whose file changed since the pin stops the
-	// resume instead of silently running new code (§6.3).
+	// resume instead of silently running new code (§6.3). One that left
+	// the catalogue replays its pinned source, with nothing to load().
+	wf := &agentdef.Workflow{Name: pin.Name}
 	if pin.Name != "" && s.Defs() != nil {
-		if cur, ok := s.Defs().WorkflowSource(pin.Name); ok && hashBytes([]byte(cur)) != pin.SourceHash {
-			return Result{Status: StatusResumeIncompatible, RunID: runID},
-				fmt.Errorf("workflow: resume %s: workflow %q changed since the run started", runID, pin.Name)
+		if cur, ok := s.Defs().Workflow(pin.Name); ok {
+			if hashBytes([]byte(cur.Source())) != pin.SourceHash {
+				return Result{Status: StatusResumeIncompatible, RunID: runID},
+					fmt.Errorf("workflow: resume %s: workflow %q changed since the run started", runID, pin.Name)
+			}
+			wf = cur
 		}
 	}
 	if got := configHash(s); got != pin.ConfigHash {
@@ -164,21 +169,23 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 	}
 	// Restore threads/mailbox/handles so recorded handles exist again.
 	_ = s.Rebuild(ctx, "")
-	return execute(ctx, s, pin.Name, string(srcBlob), input, Options{RunID: runID, Resume: true, View: opts.View})
+	return execute(ctx, s, wf, string(srcBlob), input, Options{RunID: runID, Resume: true, View: opts.View})
 }
 
-func resolveSource(s *host.Host, nameOrSource string) (name, source string, err error) {
+// resolveSource returns the catalogued workflow nameOrSource names (after
+// a reload), or nil and the source text itself for ad-hoc source.
+func resolveSource(ctx context.Context, s *host.Host, nameOrSource string) (*agentdef.Workflow, string, error) {
 	trimmed := strings.TrimSpace(nameOrSource)
 	if strings.Contains(trimmed, "\n") || strings.Contains(trimmed, "WORKFLOW") || strings.HasPrefix(trimmed, "#") {
-		return "", nameOrSource, nil
+		return nil, nameOrSource, nil
 	}
 	if s.Defs() != nil {
-		s.Defs().ReloadIfChanged()
-		if src, ok := s.Defs().WorkflowSource(trimmed); ok {
-			return trimmed, src, nil
+		_, _ = s.Defs().Reload(ctx) // a failed reload keeps the previous catalogue
+		if wf, ok := s.Defs().Workflow(trimmed); ok {
+			return wf, wf.Source(), nil
 		}
 	}
-	return "", "", fmt.Errorf("workflow: unknown workflow %q", trimmed)
+	return nil, "", fmt.Errorf("workflow: unknown workflow %q", trimmed)
 }
 
 func configHash(s *host.Host) string {
@@ -200,7 +207,8 @@ func hash16(v any) string {
 type exec struct {
 	ctx     context.Context
 	s       *host.Host
-	name    string // catalogued name, "" for ad-hoc source
+	name    string             // catalogued name, "" for ad-hoc source
+	wf      *agentdef.Workflow // the catalogued script; nil Unit for ad-hoc or uncatalogued source
 	source  string
 	runID   string // workflow run ID (journal scope)
 	nodeID  string // workflow node ID in the trace
@@ -249,8 +257,14 @@ func (e *exec) noteUsage(u model.Usage) {
 	e.spentMu.Unlock()
 }
 
-func execute(ctx context.Context, s *host.Host, name, source string, input map[string]any, opts Options) (Result, error) {
-	e := &exec{ctx: ctx, s: s, name: name, source: source, resume: opts.Resume,
+func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source string, input map[string]any, opts Options) (Result, error) {
+	name := ""
+	if wf != nil {
+		name = wf.Name
+	} else {
+		wf = &agentdef.Workflow{}
+	}
+	e := &exec{ctx: ctx, s: s, name: name, wf: wf, source: source, resume: opts.Resume,
 		lim: opts.Limits, runID: opts.RunID, nodeID: model.NewID()}
 	if e.runID == "" {
 		// Prefer the enclosing session run so trace tree queries join.
@@ -406,29 +420,37 @@ func (e *exec) limits() script.Limits {
 }
 
 func (e *exec) loadScript(ctx context.Context, thread *starlark.Thread) (starlark.StringDict, error) {
-	filename := e.name
-	if filename == "" {
-		filename = "<workflow-source>"
-	} else {
-		filename = "workflows/" + filename + ".star"
-	}
-	// load() resolves against the root that catalogued this workflow, so
-	// shared libraries live beside workflows. Modules see the same
-	// predeclared built-ins; their journaled calls share this exec.
-	if fsys := e.workflowFS(); fsys != nil {
-		loader := modules.NewLoader(modules.Dir(fsys), modules.Options{
-			Predeclared: predeclared(e), MaxSteps: e.limits().MaxSteps,
-		})
-		loader.Bind(ctx, thread, filename)
-	}
 	var globals starlark.StringDict
-	_, err := script.Run(ctx, e.limits(), thread, func() (starlark.Value, error) {
-		g, err := starlark.ExecFileOptions(dialect.FileOptions, thread, filename, e.source, predeclared(e))
-		globals = g
-		return starlark.None, err
-	})
-	if err != nil {
-		return nil, err // includes line numbers (§6.4)
+	var filename string
+	if u := e.wf.Unit; u != nil {
+		// A catalogued workflow runs its checked script: load() is served
+		// by its bundle and declared dependencies (starcompile). Modules
+		// see the same predeclared built-ins; their journaled calls share
+		// this exec.
+		filename = u.Path()
+		pre := predeclared(e)
+		ex, err := u.Exec(ctx, starcompile.ExecOptions{
+			Predeclared: pre, ModulePredeclared: pre, Thread: thread, Mutable: true,
+		})
+		if err != nil {
+			return nil, err // includes line numbers (§6.4)
+		}
+		globals = ex.Globals
+	} else {
+		// Ad-hoc source (or a pinned workflow no longer catalogued) has
+		// no bundle, so nothing to load().
+		filename = "<workflow-source>"
+		if e.name != "" {
+			filename = "workflows/" + e.name + ".star"
+		}
+		_, err := script.Run(ctx, e.limits(), thread, func() (starlark.Value, error) {
+			g, err := starlark.ExecFileOptions(dialect.FileOptions, thread, filename, e.source, predeclared(e))
+			globals = g
+			return starlark.None, err
+		})
+		if err != nil {
+			return nil, err // includes line numbers (§6.4)
+		}
 	}
 	wf, ok := globals["WORKFLOW"]
 	if !ok {
@@ -477,14 +499,6 @@ func (e *exec) layers() []config.Layer {
 		return nil
 	}
 	return []config.Layer{*l}
-}
-
-// workflowFS is the catalogue root serving this workflow's load()s.
-func (e *exec) workflowFS() fs.FS {
-	if e.name == "" || e.s.Defs() == nil {
-		return nil
-	}
-	return e.s.Defs().WorkflowFS(e.name)
 }
 
 // isRecovery reports whether err is the recovery_required blocker.

@@ -90,6 +90,10 @@ Live:
       Runs an agent or workflow via OpenRouter (needs OPENROUTER_API_KEY).
   resume [--root res] --db trace.db <workflow-run-id>
       Resumes a journaled workflow run (v 6.3).
+  --root (default: a res/ directory here or up to 3 levels above) is the
+  project definition layer: a folder with a bundle.yaml (metadata.id
+  agentsdk.project) listing its agents, skills and workflows. It replaces
+  the built-in definitions by name. A folder without bundle.yaml is an error.
 
 Queries (--db <sqlite trace>):
   runs                         list runs
@@ -1118,10 +1122,10 @@ func liveSession(ctx context.Context, g globals, cfgPath, sessionID string) (*ho
 		sink = store
 		cleanup = func() { store.Close() }
 	}
-	// Built-in catalogue first; --root (or a nearby res/ directory)
-	// shadows it by name.
-	loader := agentdef.Roots(defs.FS(), os.DirFS(findRoot(g.root)))
-	if err := loader.Load(); err != nil {
+	// The built-in catalogue is the shipped layer; --root (or a nearby
+	// res/ directory) is the project layer, which replaces it by name.
+	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(), Project: findRoot(g.root)})
+	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}

@@ -852,9 +852,13 @@ func builtinWorkflowRun(e *exec, _ *starlark.Thread, args starlark.Tuple, kwargs
 	if err != nil {
 		return nil, fmt.Errorf("workflow_run: input: %w", err)
 	}
-	name, source, err := resolveSource(e.s, nameOrSource)
+	wf, source, err := resolveSource(e.ctx, e.s, nameOrSource)
 	if err != nil {
 		return nil, err
+	}
+	name := ""
+	if wf != nil {
+		name = wf.Name
 	}
 	childPath := name
 	if childPath == "" {
@@ -865,7 +869,7 @@ func builtinWorkflowRun(e *exec, _ *starlark.Thread, args starlark.Tuple, kwargs
 		"phase": "intent", "args_hash": hash16(input)})
 	// Nested run: same journal run (its calls journal under a child node
 	// path), the caller's narrowed view via ctx, shared session budget.
-	res, err := execute(e.ctx, e.s, name, source, input, Options{
+	res, err := execute(e.ctx, e.s, wf, source, input, Options{
 		RunID: e.runID, Resume: e.resume, NodePath: e.path + ">" + childPath,
 		View: e.view,
 	})

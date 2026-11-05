@@ -29,9 +29,16 @@ import nothing else from this module (beyond `model`). `loop` builds on
 `model`, `transcript` and `trace`. `host` builds on all of them plus
 `agentdef`; `workflow` and `agentcap` build on `host`. Domain packages never
 import capability-services; only `host` (tool view over a registry view) and
-`agentcap` (the bridge) do. This module never imports a consumer.
+`agentcap` (the bridge) do. This module never imports a consumer; its
+craggy-io dependencies are foundation-kit, script-services and
+capability-services (`arch_test.go` enforces the list).
 
+- foundation-kit's `bundle` loads definition content; agentdef declares
+  its kinds and `Open` holds the layers in a `bundle.Live`. Never add a
+  second loader or read definition files directly.
 - script-services runs and checks scripts; it knows nothing of agents.
+  Agent and workflow files compile through its `starcompile` compiler,
+  never through a `modules.NewLoader` built here.
   Host effects reach scripts only as `script.Program.Predeclared` built-ins
   with a matching static description (`check.Callable` / starlarkcap views).
 - capability-services owns registration, views, jobs and projections.
@@ -47,14 +54,37 @@ import capability-services; only `host` (tool view over a registry view) and
 2. Trace sink: `memory.New()` for tests, the SQLite sink in
    `adapters/tracesqlite` for durable runs. One writer owns a sink; close it
    after the host.
-3. Definitions: `agentdef.Load(fsys)` over `.star` files, or `defs.Builtin()`
-   for the embedded set. Definitions name profiles, never models.
+3. Definitions: `agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(),
+   UserDir: ..., Project: ...})`, or `defs.Builtin(ctx)` for the embedded set
+   alone. Definitions name profiles, never models. See "Definition bundles".
 4. Host: `host.Open(ctx, host.Options{...})`; close in reverse order
    (host, then sink, then module sources).
 5. Capabilities (optional): `agentcap.Register(r, h, agentcap.Options{...})`
    adds `agents.*`, `workflows.*`, `llm.*`, `memory.*` and `trace.*` to a
    capability-services registry. Runtime `define`/`promote` writes nothing
    unless `Options.Approve` approves it.
+
+## Definition bundles
+
+- **Every definition folder needs a `bundle.yaml`** listing each agent
+  (`agentsdk.agent@1`), skill (`agentsdk.skill@1`, a `SKILL.md`) and
+  workflow (`agentsdk.workflow@1`) as a contribution whose `id` is its
+  name. Never generate a manifest from a folder layout or file names, in
+  code or tests: fixtures write their `bundle.yaml` bytes.
+- One agent per file: `agent(...)` exactly once, `name` equal to the
+  contribution id. Share helpers through `load()` of undeclared support
+  files in the same bundle, or `@<dependency-id>/path` from a declared
+  dependency.
+- Layers are one bundle each, with a fixed `metadata.id`: shipped
+  `agentsdk.shipped` (`defs`), user `agentsdk.user` at
+  `<UserDir>/agentsdk.user`, project `agentsdk.project` at `Project`.
+  Replacement is only through the layer chain; anything else sharing a
+  name is a `bundle.id_conflict`. A missing layer folder is skipped; one
+  without `bundle.yaml` is an error.
+- Runtime changes go through the `bundle.Live`: `Reload`,
+  `AddDefinition` (Go-built definitions, a `kind.Provider`) and
+  `InstallAgent`/`InstallWorkflow` (promote rewrites the user bundle and
+  its `bundle.yaml` through `Live.Install`).
 
 ## Semantics that must not drift
 

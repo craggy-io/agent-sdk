@@ -1,11 +1,19 @@
 # workflow
 
 Durable Starlark workflows (design §6), executed with script-services
-(shared dialect, `load()` against the cataloguing root, step/time
-limits — `Options.Limits`, defaulting to `script.DefaultLimits`,
+(shared dialect, step/time limits — `Options.Limits`, defaulting to `script.DefaultLimits`,
 never unbounded). Importing the package registers it as the host's
 workflow runner, so `host.RunWorkflow` and the loop's opt-in
 `workflow` tool reach it.
+
+A catalogued workflow is an `agentsdk.workflow@1` contribution of a
+definition bundle (see [agentdef](agentdef.md)): its bundle.yaml lists
+it, and its id is the name `Run` takes. It is checked against the
+workflow built-ins when the bundle loads, and `load()` reaches its own
+bundle and the dependencies that bundle declares (starcompile). Ad-hoc
+source passed to `Run` has no bundle, so it cannot `load()`. Resume
+refuses a catalogued workflow whose source changed since the run
+started.
 
 A workflow file declares `WORKFLOW = workflow(description, input,
 agents, profiles, limits)` (`input` is a field dict of `schema.*`

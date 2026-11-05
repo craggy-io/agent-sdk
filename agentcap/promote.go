@@ -3,8 +3,6 @@ package agentcap
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -14,16 +12,18 @@ import (
 	"github.com/craggy-io/capability-services/registry"
 )
 
-// Promotion: a dynamic definition or workflow is persisted as a .star
-// file only when the host's Approve hook accepts the exact bytes.
-// Agents can propose a definition; they cannot approve it.
+// Promotion: a dynamic definition or workflow is installed in the user
+// layer of the host's loader (agentdef.Loader.InstallAgent and
+// InstallWorkflow, which add the file and its bundle.yaml entry through
+// bundle.Live.Install) only when the host's Approve hook accepts the exact
+// bytes. Agents can propose a definition; they cannot approve it.
 
 func (s *service) approve(ctx context.Context, kind, name string, payload []byte) error {
 	if s.opts.Approve == nil {
 		return registry.Errorf(registry.Denied, "%s.promote requires host approval; none configured", kind)
 	}
-	if s.opts.Root == "" {
-		return registry.Errorf(registry.Unavailable, "%s.promote needs a resource root", kind)
+	if s.h.Defs() == nil || s.h.Defs().UserDir() == "" {
+		return registry.Errorf(registry.Unavailable, "%s.promote needs a user definition layer (agentdef.Options.UserDir)", kind)
 	}
 	if !s.opts.Approve(ctx, kind, name, payload) {
 		return registry.Errorf(registry.Denied, "%s.promote of %q was not approved", kind, name)
@@ -49,47 +49,28 @@ func (s *service) promoteAgent(ctx context.Context, d *dynAgent) (string, error)
 		}
 	}
 	// Validate the exact bytes before asking for approval: they must
-	// parse and declare this agent, resolvable against the catalogue.
-	defs, _, err := agentdef.ParseSource(nil, "agents/"+name+".star", []byte(src))
+	// declare this agent, resolvable against the catalogue. The install
+	// reloads every layer and is rolled back if that fails.
+	pd, err := agentdef.ParseSource(ctx, []byte(src))
 	if err != nil {
 		return "", invalid("promoted source would not parse: %v", err)
 	}
-	found := false
-	for _, pd := range defs {
-		if pd.Name == name {
-			found = true
-			if s.h.Defs() != nil {
-				if _, err := s.h.Defs().ResolveDynamic(*pd, nil); err != nil {
-					if _, isLoaded := s.h.Defs().Get(pd.Extends); pd.Extends != "" && !isLoaded {
-						// The parent may be declared in the same file; the
-						// post-write catalogue reload is the real check.
-						continue
-					}
-					if pd.Extends != "" {
-						return "", coded(err)
-					}
-				}
-			}
-		}
+	if pd.Name != name {
+		return "", invalid("promoted source declares agent %q, not %q", pd.Name, name)
 	}
-	if !found {
-		return "", invalid("promoted source does not declare agent %q", name)
+	if s.h.Defs() != nil && pd.Extends != "" {
+		if _, err := s.h.Defs().ResolveDynamic(*pd, nil); err != nil {
+			return "", coded(err)
+		}
 	}
 	if err := s.approve(ctx, "agent", name, []byte(src)); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(s.opts.Root, "agents")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	p, err := s.h.Defs().InstallAgent(ctx, name, []byte(src))
+	if err != nil {
 		return "", coded(err)
 	}
-	path := filepath.Join(dir, name+".star")
-	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
-		return "", coded(err)
-	}
-	if s.h.Defs() != nil {
-		s.h.Defs().ReloadIfChanged()
-	}
-	return path, nil
+	return p, nil
 }
 
 func (s *service) promoteWorkflow(ctx context.Context, name, source string) (string, error) {
@@ -103,18 +84,11 @@ func (s *service) promoteWorkflow(ctx context.Context, name, source string) (str
 	if err := s.approve(ctx, "workflow", name, []byte(source)); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(s.opts.Root, "workflows")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	p, err := s.h.Defs().InstallWorkflow(ctx, name, []byte(source))
+	if err != nil {
 		return "", coded(err)
 	}
-	path := filepath.Join(dir, name+".star")
-	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
-		return "", coded(err)
-	}
-	if s.h.Defs() != nil {
-		s.h.Defs().ReloadIfChanged()
-	}
-	return path, nil
+	return p, nil
 }
 
 // q renders a Starlark string literal.

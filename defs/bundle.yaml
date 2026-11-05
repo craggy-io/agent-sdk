@@ -1,0 +1,17 @@
+# The agent definitions, skills and workflows shipped with agent-sdk: the
+# bottom layer (agentdef.ShippedID). User and project layers replace these
+# by contribution id.
+apiVersion: craggy.io/bundle/v1
+
+metadata:
+  id: agentsdk.shipped
+  version: 1.0.0
+  title: agent-sdk shipped definitions
+
+contributions:
+  - {id: base, kind: agentsdk.agent@1, path: agents/base.star}
+  - {id: assistant, kind: agentsdk.agent@1, path: agents/assistant.star}
+  - {id: reviewer, kind: agentsdk.agent@1, path: agents/reviewer.star}
+  - {id: example-review, kind: agentsdk.skill@1, path: skills/example-review/SKILL.md}
+  - {id: agent-turn, kind: agentsdk.workflow@1, path: workflows/agent-turn.star}
+  - {id: layered, kind: agentsdk.workflow@1, path: workflows/layered.star}

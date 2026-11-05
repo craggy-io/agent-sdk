@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/agenttest"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
@@ -41,7 +40,7 @@ func openTest(t *testing.T, prov model.Provider, sink trace.Sink, cfgMut func(*c
 	}
 	s, err := host.Open(context.Background(), host.Options{
 		Config: cfg, View: echoView(), Provider: prov,
-		Defs: agentdef.DirRoots(testRoot(t)), Trace: sink,
+		Defs: openDefs(t, testRoot(t)), Trace: sink,
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -574,7 +573,7 @@ func TestRebuildProjections(t *testing.T) {
 	root := testRoot(t)
 	cfg := config.Defaults()
 	opts := host.Options{ID: "resume-session", Config: cfg, View: echoView(),
-		Provider: prov, Defs: agentdef.DirRoots(root), Trace: sink}
+		Provider: prov, Defs: openDefs(t, root), Trace: sink}
 	s1, err := host.Open(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
@@ -673,7 +672,7 @@ func TestProgressiveToolsFromDefinition(t *testing.T) {
 	}).WithGroups(view.Groups()...)
 	prov := agenttest.NewScripted(agenttest.TextResponse("lazy"), agenttest.TextResponse("solo"))
 	s, err := host.Open(context.Background(), host.Options{
-		Config: config.Defaults(), View: grouped, Provider: prov, Defs: agentdef.DirRoots(root), Trace: tracemem.New(),
+		Config: config.Defaults(), View: grouped, Provider: prov, Defs: openDefs(t, root), Trace: tracemem.New(),
 	})
 	if err != nil {
 		t.Fatal(err)

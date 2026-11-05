@@ -1,0 +1,215 @@
+package agentdef
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"path"
+	"strings"
+	"testing/fstest"
+
+	"github.com/craggy-io/foundation-kit/bundle"
+	"github.com/craggy-io/foundation-kit/kind"
+
+	"github.com/craggy-io/script-services/check"
+	"github.com/craggy-io/script-services/script"
+	"github.com/craggy-io/script-services/starcompile"
+)
+
+// The kinds of definition content. Each is global: a contribution's id is
+// the name hosts and scripts use (an agent's, skill's or workflow's), and
+// it is unique across a catalog unless a layer overrides another.
+var (
+	// AgentKind is a .star file that calls agent(...) exactly once, with
+	// name equal to the contribution id.
+	AgentKind = kind.New[*Definition]("agentsdk.agent", 1, kind.Global())
+	// SkillKind is a SKILL.md file: front matter (name, description)
+	// and a body. A name in the front matter must equal the contribution
+	// id.
+	SkillKind = kind.New[*Skill]("agentsdk.skill", 1, kind.Global())
+	// WorkflowKind is a workflow .star file, checked when loaded and run
+	// by package workflow.
+	WorkflowKind = kind.New[*Workflow]("agentsdk.workflow", 1, kind.Global())
+)
+
+// Diagnostic codes this package reports besides starcompile's
+// (script.check, script.load, script.exec).
+const (
+	// CodeAgent: an agent file declares no agent, several, or one whose
+	// name is not its contribution id.
+	CodeAgent bundle.Code = "agentsdk.agent"
+	// CodeSkill: a SKILL.md file is unreadable or malformed, or names
+	// another skill.
+	CodeSkill bundle.Code = "agentsdk.skill"
+)
+
+// Workflow is a catalogued workflow: its checked script, kept to run
+// later. Package workflow runs Unit's top level with its built-ins, then
+// run(input).
+type Workflow struct {
+	Name string
+	Unit *starcompile.Unit
+}
+
+// Source returns the workflow's source text.
+func (w *Workflow) Source() string { return string(w.Unit.Source()) }
+
+// workflowBuiltins are the names a workflow script and the modules it
+// loads see. Package workflow provides exactly these (its tests check).
+var workflowBuiltins = []string{
+	"agent", "ask", "budget", "call", "close", "config", "define", "interrupt",
+	"json", "list_agents", "log", "parallel", "phase", "render", "resume",
+	"schema", "send", "spawn", "spec", "start", "status", "tools", "wait",
+	"workflow", "workflow_run",
+}
+
+// WorkflowBuiltins returns the predeclared names workflow files are
+// checked against when they load.
+func WorkflowBuiltins() []string { return append([]string(nil), workflowBuiltins...) }
+
+// Compilers returns the compilers for AgentKind, SkillKind and
+// WorkflowKind. Open uses them; a host that builds its own catalog with
+// bundle.Load adds them.
+//
+// Agent and workflow files compile through script-services' shared
+// compiler (starcompile): load() is served by the file's own bundle and,
+// as @<dependency-id>/path, by the dependencies its bundle.yaml declares.
+// Prompt {"file": ...} fragments and loop.output schema files are read
+// from the agent file's bundle, relative to the file. Compiling has no
+// side effects, so bundle.Live reuses compiled definitions across
+// reloads.
+func Compilers() []bundle.AnyCompiler {
+	return []bundle.AnyCompiler{
+		bundle.Compile(AgentKind, starcompile.Compiler(agentOptions(), compileAgent)),
+		bundle.Compile(SkillKind, compileSkill),
+		bundle.Compile(WorkflowKind, starcompile.Compiler(workflowOptions(), compileWorkflow)),
+	}
+}
+
+// agentOptions: an agent file sees agent() and the helpers; the modules
+// it loads see only the helpers.
+func agentOptions() starcompile.Options {
+	return starcompile.Options{
+		Check:             check.Env{Predeclared: []string{"agent", "tools_filter", "loop_spec", "schema"}},
+		ModulePredeclared: helpers(),
+	}
+}
+
+func workflowOptions() starcompile.Options {
+	return starcompile.Options{Check: check.Env{
+		Predeclared:       workflowBuiltins,
+		ModulePredeclared: workflowBuiltins,
+	}}
+}
+
+func compileAgent(ctx context.Context, u *starcompile.Unit) (bundle.Compiled[*Definition], []bundle.Diagnostic) {
+	d, diags := buildAgent(ctx, u)
+	if d == nil {
+		return bundle.Compiled[*Definition]{}, diags
+	}
+	if id := u.Contribution().Ref.ID; d.Name != id {
+		return bundle.Compiled[*Definition]{}, []bundle.Diagnostic{u.Errorf(CodeAgent, script.Position{},
+			"%s declares agent %q but bundle.yaml names the contribution %q; they must match", u.Path(), d.Name, id)}
+	}
+	return bundle.Compiled[*Definition]{Value: d}, nil
+}
+
+// buildAgent runs an agent file's top level with a fresh collector and
+// returns the one agent it declares.
+func buildAgent(ctx context.Context, u *starcompile.Unit) (*Definition, []bundle.Diagnostic) {
+	files := u.Contribution().Files
+	col := &collector{
+		file: u.Path(), dir: path.Dir(u.Path()),
+		read: func(name string) ([]byte, error) { return fs.ReadFile(files, name) },
+	}
+	if _, err := u.Exec(ctx, starcompile.ExecOptions{Predeclared: col.predeclared()}); err != nil {
+		return nil, u.Diagnostics(err)
+	}
+	if len(col.defs) != 1 {
+		return nil, []bundle.Diagnostic{u.Errorf(CodeAgent, script.Position{},
+			"%s declares %d agents; a definition file declares exactly one agent(...)", u.Path(), len(col.defs))}
+	}
+	d := col.defs[0]
+	d.SourceText = u.Source()
+	return d, nil
+}
+
+func compileSkill(_ context.Context, c bundle.Contribution) (bundle.Compiled[*Skill], []bundle.Diagnostic) {
+	fail := func(err error) (bundle.Compiled[*Skill], []bundle.Diagnostic) {
+		return bundle.Compiled[*Skill]{}, []bundle.Diagnostic{{
+			Code: CodeSkill, Severity: bundle.SeverityError, Bundle: c.Bundle.ID,
+			Contribution: c.Ref.ID, Path: c.Path, Message: err.Error(),
+		}}
+	}
+	data, err := fs.ReadFile(c.Files, c.Path)
+	if err != nil {
+		return fail(err)
+	}
+	sk, err := parseSkill(data, c.Ref.ID, c.Path)
+	if err != nil {
+		return fail(err)
+	}
+	return bundle.Compiled[*Skill]{Value: sk}, nil
+}
+
+func compileWorkflow(_ context.Context, u *starcompile.Unit) (bundle.Compiled[*Workflow], []bundle.Diagnostic) {
+	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Unit: u}}, nil
+}
+
+// ParseSource compiles a runtime-supplied definition source (agents.run
+// and agents.define with source, and promote's validation), which must
+// declare exactly one agent. The result is not catalogued. The source goes
+// through the same compiler as a bundle's agent file, as a lone file:
+// there is nothing to load() and no prompt or schema file to read.
+func ParseSource(ctx context.Context, src []byte) (*Definition, error) {
+	const file = "dynamic.star"
+	c := bundle.Contribution{
+		Ref:    bundle.Ref{Owner: "agentsdk.dynamic", ID: "dynamic"},
+		Kind:   AgentKind.ID(),
+		Bundle: bundle.Identity{ID: "agentsdk.dynamic"},
+		Path:   file,
+		Files:  fstest.MapFS{file: {Data: src}},
+	}
+	u, diags := starcompile.New(ctx, c, agentOptions())
+	if u == nil {
+		return nil, diagnosticsError(diags)
+	}
+	d, diags := buildAgent(ctx, u)
+	if d == nil {
+		return nil, diagnosticsError(diags)
+	}
+	return d, nil
+}
+
+// diagnosticsError lists every error diagnostic as path:line:col: message.
+func diagnosticsError(diags []bundle.Diagnostic) error {
+	var parts []string
+	for _, d := range diags {
+		if d.Severity != bundle.SeverityError {
+			continue
+		}
+		parts = append(parts, formatDiagnostic(d))
+	}
+	if len(parts) == 0 {
+		return errors.New("agentdef: compile failed")
+	}
+	return fmt.Errorf("agentdef: %s", strings.Join(parts, "; "))
+}
+
+func formatDiagnostic(d bundle.Diagnostic) string {
+	pos := d.Path
+	if d.Bundle != "" && pos != "" {
+		pos = d.Bundle + ":" + pos
+	}
+	if d.Line > 0 {
+		pos = fmt.Sprintf("%s:%d", pos, d.Line)
+		if d.Column > 0 {
+			pos = fmt.Sprintf("%s:%d", pos, d.Column)
+		}
+	}
+	if pos == "" {
+		return fmt.Sprintf("%s (%s)", d.Message, d.Code)
+	}
+	return fmt.Sprintf("%s: %s (%s)", pos, d.Message, d.Code)
+}

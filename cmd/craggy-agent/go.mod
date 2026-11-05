@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/craggy-io/capability-services v0.1.0 // indirect
+	github.com/craggy-io/foundation-kit v0.0.0-20261105161744-a4c555eecf83 // indirect
 	github.com/craggy-io/script-services v0.1.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
@@ -18,6 +19,7 @@ require (
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.79.0 // indirect

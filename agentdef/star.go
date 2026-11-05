@@ -3,6 +3,7 @@ package agentdef
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -23,19 +24,27 @@ func ValidateMaxEffect(name, eff string) error {
 	}
 }
 
-// collector gathers declarations from one definition file.
+// collector gathers the agent() declarations of one definition file. read
+// serves the file's bundle, for prompt and schema files.
 type collector struct {
-	file  string // catalogue path, e.g. agents/team.star
-	dir   string // fs directory of file, for relative file reads
-	read  func(name string) ([]byte, error)
-	defs  []*Definition
-	skill []*Skill
+	file string // path in the bundle, e.g. agents/reviewer.star
+	dir  string // directory of file, for relative file reads
+	read func(name string) ([]byte, error)
+	defs []*Definition
 }
 
+// predeclared is what a definition file sees: agent() plus the pure
+// helpers in helpers.
 func (c *collector) predeclared() starlark.StringDict {
+	out := helpers()
+	out["agent"] = starlark.NewBuiltin("agent", c.agentBuiltin)
+	return out
+}
+
+// helpers are the pure built-ins definition files and the modules they
+// load() share. Modules cannot declare agents.
+func helpers() starlark.StringDict {
 	return starlark.StringDict{
-		"agent":        starlark.NewBuiltin("agent", c.agentBuiltin),
-		"skill":        starlark.NewBuiltin("skill", c.skillBuiltin),
 		"tools_filter": starlark.NewBuiltin("tools_filter", specBuiltin("tools_filter")),
 		"loop_spec":    starlark.NewBuiltin("loop_spec", specBuiltin("loop_spec")),
 		"schema":       scriptschema.Module(),
@@ -58,19 +67,6 @@ func specBuiltin(name string) func(*starlark.Thread, *starlark.Builtin, starlark
 		}
 		return d, nil
 	}
-}
-
-func (c *collector) skillBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var name, description, body string
-	if err := starlark.UnpackArgs("skill", args, kwargs,
-		"name", &name, "description?", &description, "body", &body); err != nil {
-		return nil, err
-	}
-	if name == "" {
-		return nil, fmt.Errorf("skill: name is required")
-	}
-	c.skill = append(c.skill, &Skill{Name: name, Description: description, Body: body})
-	return starlark.None, nil
 }
 
 func (c *collector) agentBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -129,7 +125,7 @@ func (c *collector) agentBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args s
 // are strings or dicts: {"file": "role.md"}, {"name": "x", "text": "..."}
 // or {"x": "..."} to append, {"replace": "x", "text"/"file": ...} to
 // substitute, {"remove": "x"} to delete. File contents are read now,
-// relative to the declaring file.
+// relative to the declaring file, from its bundle.
 func (c *collector) decodePrompt(agent string, v starlark.Value) ([]PromptEntry, error) {
 	if v == nil {
 		return nil, nil
@@ -465,9 +461,9 @@ func durationPtr(field string, v starlark.Value) (*time.Duration, error) {
 	}
 }
 
+// joinPath resolves name against the declaring file's directory. A path
+// that leaves the bundle fails to read: bundle files are only served under
+// their own root.
 func joinPath(dir, name string) string {
-	if dir == "" || dir == "." {
-		return name
-	}
-	return dir + "/" + name
+	return path.Join(dir, name)
 }

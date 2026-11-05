@@ -4,285 +4,267 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
+	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
-	"go.starlark.net/starlark"
-
-	"github.com/craggy-io/script-services/dialect"
-	"github.com/craggy-io/script-services/modules"
-	"github.com/craggy-io/script-services/script"
+	"github.com/craggy-io/foundation-kit/bundle"
+	"github.com/craggy-io/foundation-kit/kind"
 )
 
-// Loader loads definitions, skills and workflow sources from ordered
-// roots: shipped, then user, then project. A later root shadows an
-// earlier one by name; shadowed names are recorded in Shadowed as
-// "agent:<name>", "skill:<name>" or "workflow:<name>". A root without
-// the expected subdirectories contributes nothing.
-//
-// Each root is an fs.FS with agents/*.star, skills/*/SKILL.md and
-// workflows/*.star. Load builds fresh maps and swaps them in only on
-// success, so a run in progress keeps the snapshot it resolved from and
-// a bad edit cannot half-replace a working catalogue.
+// The owner IDs of the definition layers and of Go-built definitions. A
+// layer's bundle.yaml must use its layer's metadata.id.
+const (
+	ShippedID = "agentsdk.shipped" // Options.Shipped, such as defs.Source()
+	UserID    = "agentsdk.user"    // the bundle at <Options.UserDir>/agentsdk.user
+	ProjectID = "agentsdk.project" // the bundle at Options.Project
+	GoID      = "agentsdk.go"      // Options.Definitions and AddDefinition
+)
+
+// Options choose the bundles a Loader catalogues. Every layer is one
+// bundle, a folder with a bundle.yaml whose metadata.id is the layer's ID.
+// Layers replace each other by contribution id, explicitly, through a
+// bundle override chain: user replaces shipped, project replaces user (and
+// shipped, when there is no user layer). Catalog.Overrides reports what
+// was replaced.
+type Options struct {
+	// Shipped is the bottom layer, usually defs.Source(). Its
+	// metadata.id must be ShippedID. nil: none.
+	Shipped bundle.Source
+	// UserDir holds the user layer: the bundle at
+	// <UserDir>/agentsdk.user (metadata.id UserID). It is where
+	// InstallAgent and InstallWorkflow write (agents.promote and
+	// workflows.promote), through bundle.Live.Install, which places a
+	// bundle at <dir>/<metadata.id>; other folders in UserDir are not
+	// read. A missing agentsdk.user folder is no user layer yet. "": none.
+	UserDir string
+	// Project is the top layer: a bundle directory whose metadata.id is
+	// ProjectID. A missing directory is skipped. "": none.
+	Project string
+	// Sources are other bundles: libraries that layers declare as
+	// dependencies and load() as @<id>/path, or extra definitions. They
+	// replace nothing, so a name one of them shares with a layer is a
+	// bundle.id_conflict error.
+	Sources []bundle.Source
+	// Definitions are built in Go, owned by GoID. They replace nothing
+	// either. See AddDefinition.
+	Definitions []*Definition
+}
+
+// Loader is the live catalogue of agent definitions, skills and
+// workflows: a bundle.Live over the layers in Options. Every read takes the
+// current catalog, which a reload replaces whole or not at all, so a run
+// in progress keeps what it resolved and a bad edit never half-replaces a
+// working catalogue.
 type Loader struct {
-	roots []fs.FS
+	opts      Options
+	compilers []bundle.AnyCompiler
+	live      *bundle.Live
 
-	mu          sync.RWMutex
-	defs        map[string]*Definition
-	skills      map[string]*Skill
-	workflowSrc map[string]string // name -> source text
-	workflowDir map[string]fs.FS  // name -> root serving its load()s
-	digest      string            // content digest of catalogued files
-	loaded      bool
+	mu   sync.Mutex // guards defs
+	defs []*Definition
 
-	// Shadowed records names replaced by a later root at Load time.
-	Shadowed []string
+	installMu sync.Mutex // serializes InstallAgent/InstallWorkflow
 }
 
-// Roots builds a Loader over filesystems, earliest first.
-func Roots(fsys ...fs.FS) *Loader {
-	return &Loader{roots: append([]fs.FS(nil), fsys...)}
-}
-
-// DirRoots builds a Loader over directories, earliest first. Missing
-// directories are skipped. Definitions are trusted host configuration,
-// like the workflows they sit beside.
-func DirRoots(dirs ...string) *Loader {
-	l := &Loader{}
-	for _, d := range dirs {
-		l.roots = append(l.roots, os.DirFS(d))
+// Open loads the layers. The first load must succeed: a layer folder
+// without a bundle.yaml, a file that fails its check or top level, or a
+// name two non-layer bundles share is an error listing every problem.
+func Open(ctx context.Context, opts Options) (*Loader, error) {
+	l := &Loader{opts: opts, compilers: Compilers()}
+	l.opts.Sources = slices.Clone(opts.Sources)
+	for _, d := range opts.Definitions {
+		if err := validGoDefinition(d); err != nil {
+			return nil, err
+		}
+		l.defs = append(l.defs, d)
 	}
-	return l
-}
-
-// Load (re)reads every root.
-func (l *Loader) Load() error {
-	defs := map[string]*Definition{}
-	skills := map[string]*Skill{}
-	wfs := map[string]string{}
-	wfDirs := map[string]fs.FS{}
-	var shadowed []string
-	h := sha256.New()
-
-	for _, root := range l.roots {
-		// agents/*.star
-		agentFiles, _ := fs.Glob(root, "agents/*.star")
-		sort.Strings(agentFiles)
-		for _, file := range agentFiles {
-			data, err := fs.ReadFile(root, file)
-			if err != nil {
-				return fmt.Errorf("agentdef: read %s: %w", file, err)
-			}
-			fmt.Fprintf(h, "%s:%x\n", file, sha256.Sum256(data))
-			col := &collector{
-				file: file, dir: path.Dir(file),
-				read: func(name string) ([]byte, error) { return fs.ReadFile(root, name) },
-			}
-			if err := execDefFile(root, file, data, col); err != nil {
-				return err
-			}
-			for _, d := range col.defs {
-				d.SourceText = append([]byte(nil), data...)
-				if _, exists := defs[d.Name]; exists {
-					shadowed = append(shadowed, "agent:"+d.Name)
-				}
-				defs[d.Name] = d
-			}
-			for _, sk := range col.skill {
-				if _, exists := skills[sk.Name]; exists {
-					shadowed = append(shadowed, "skill:"+sk.Name)
-				}
-				skills[sk.Name] = sk
-			}
-		}
-		// skills/*/SKILL.md
-		skillFiles, _ := fs.Glob(root, "skills/*/SKILL.md")
-		sort.Strings(skillFiles)
-		for _, file := range skillFiles {
-			data, err := fs.ReadFile(root, file)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(h, "%s:%x\n", file, sha256.Sum256(data))
-			sk, err := parseSkill(data, path.Base(path.Dir(file)), file)
-			if err != nil {
-				return err
-			}
-			if _, exists := skills[sk.Name]; exists {
-				shadowed = append(shadowed, "skill:"+sk.Name)
-			}
-			skills[sk.Name] = sk
-		}
-		// workflows/*.star (catalogued; executed by package workflow)
-		wfFiles, _ := fs.Glob(root, "workflows/*.star")
-		sort.Strings(wfFiles)
-		for _, file := range wfFiles {
-			data, err := fs.ReadFile(root, file)
-			if err != nil {
-				return fmt.Errorf("agentdef: read workflow %s: %w", file, err)
-			}
-			fmt.Fprintf(h, "%s:%x\n", file, sha256.Sum256(data))
-			name := strings.TrimSuffix(path.Base(file), ".star")
-			if _, exists := wfs[name]; exists {
-				shadowed = append(shadowed, "workflow:"+name)
-			}
-			wfs[name] = string(data)
-			wfDirs[name] = root
-		}
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.defs, l.skills, l.workflowSrc, l.workflowDir = defs, skills, wfs, wfDirs
-	l.digest = hex.EncodeToString(h.Sum(nil))
-	l.Shadowed = shadowed
-	l.loaded = true
-	return nil
-}
-
-// execDefFile runs one definition file's top level under the shared
-// Starlark dialect, collecting agent()/skill() declarations. The root
-// serves load() so files can share fragments.
-func execDefFile(root fs.FS, file string, data []byte, col *collector) error {
-	ctx := context.Background()
-	loader := modules.NewLoader(modules.Dir(root), modules.Options{
-		Predeclared: col.predeclared(), MaxSteps: script.DefaultLimits.MaxSteps,
-	})
-	thread := script.NewThread(file, script.DefaultLimits, nil)
-	loader.Bind(ctx, thread, file)
-	_, err := script.Run(ctx, script.DefaultLimits, thread, func() (starlark.Value, error) {
-		_, err := starlark.ExecFileOptions(dialect.FileOptions, thread, file, data, col.predeclared())
-		return starlark.None, err
-	})
+	live, err := bundle.NewLive(ctx, l.options)
 	if err != nil {
-		return fmt.Errorf("agentdef: %s: %w", file, err)
+		return nil, loadError(err)
+	}
+	l.live = live
+	return l, nil
+}
+
+// options is the bundle.Live options function: it looks for the layer
+// folders again on every load.
+func (l *Loader) options(context.Context) (bundle.Options, error) {
+	o := bundle.Options{Compilers: l.compilers, Sources: slices.Clone(l.opts.Sources)}
+	var layers []string
+	if l.opts.Shipped != nil {
+		o.Sources = append(o.Sources, l.opts.Shipped)
+		layers = append(layers, ShippedID)
+	}
+	for _, layer := range []struct{ id, dir string }{{UserID, l.userBundle()}, {ProjectID, l.opts.Project}} {
+		ok, err := layerPresent(layer.id, layer.dir)
+		if err != nil {
+			return bundle.Options{}, err
+		}
+		if ok {
+			o.Sources = append(o.Sources, bundle.Dir(layer.dir))
+			layers = append(layers, layer.id)
+		}
+	}
+	for i := 1; i < len(layers); i++ {
+		o.BundleOverrides = append(o.BundleOverrides, bundle.BundleOverride{Target: layers[i-1], Replacement: layers[i]})
+	}
+	l.mu.Lock()
+	defs := slices.Clone(l.defs)
+	l.mu.Unlock()
+	if len(defs) > 0 {
+		o.Providers = []kind.Provider{goProvider(defs)}
+	}
+	return o, nil
+}
+
+// layerPresent reports whether a layer folder exists. One without a
+// bundle.yaml is an error: the folder is meant to be a layer.
+func layerPresent(id, dir string) (bool, error) {
+	if dir == "" {
+		return false, nil
+	}
+	st, err := os.Stat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("agentdef: layer %s: %w", id, err)
+	case !st.IsDir():
+		return false, fmt.Errorf("agentdef: layer %s: %s is not a folder", id, dir)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bundle.yaml")); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, fmt.Errorf("agentdef: layer %s: %s has no bundle.yaml; a definition folder needs one, with metadata.id %s, listing its agents, skills and workflows", id, dir, id)
+		}
+		return false, fmt.Errorf("agentdef: layer %s: %w", id, err)
+	}
+	return true, nil
+}
+
+// goProvider holds the Go-built definitions. A built-in has no bytes to
+// hash, so the version is a digest of the definitions: changing one
+// changes the catalog digest, which is what makes a reload swap it in.
+func goProvider(defs []*Definition) kind.Provider {
+	b, _ := json.Marshal(defs)
+	sum := sha256.Sum256(b)
+	p := kind.Provider{ID: GoID, Version: "sha256-" + hex.EncodeToString(sum[:8])}
+	for _, d := range defs {
+		p.Builtins = append(p.Builtins, kind.Builtin(AgentKind, d.Name, d))
+	}
+	return p
+}
+
+func validGoDefinition(d *Definition) error {
+	if d == nil || d.Name == "" {
+		return errors.New("agentdef: a Go definition needs a name")
+	}
+	return ValidateMaxEffect(d.Name, d.Tools.MaxEffect)
+}
+
+// loadFailure lists every diagnostic of a failed load.
+type loadFailure struct{ err *bundle.LoadError }
+
+func (e loadFailure) Error() string {
+	parts := make([]string, 0, len(e.err.Diagnostics))
+	for _, d := range e.err.Diagnostics {
+		if d.Severity == bundle.SeverityError {
+			parts = append(parts, formatDiagnostic(d))
+		}
+	}
+	return "agentdef: definitions failed to load: " + strings.Join(parts, "; ")
+}
+
+func (e loadFailure) Unwrap() error { return e.err }
+
+// loadError wraps a bundle load error so its message lists every problem;
+// errors.As still finds the *bundle.LoadError.
+func loadError(err error) error {
+	var le *bundle.LoadError
+	if errors.As(err, &le) {
+		return loadFailure{le}
+	}
+	return err
+}
+
+// Catalog returns the current catalog. It never blocks; read everything
+// one task needs from a single catalog.
+func (l *Loader) Catalog() *bundle.Catalog { return l.live.Catalog() }
+
+// Reload loads the layers again (bundle.Live.Reload) and reports whether
+// the catalog changed. On failure the previous catalog stays current and
+// the error lists every problem.
+func (l *Loader) Reload(ctx context.Context) (bool, error) {
+	changed, err := l.live.Reload(ctx)
+	return changed, loadError(err)
+}
+
+// Shadowed returns every definition a higher layer replaced, from the
+// current catalog (bundle.Catalog.Overrides).
+func (l *Loader) Shadowed() []bundle.Override { return l.Catalog().Overrides() }
+
+// UserDir returns Options.UserDir, where InstallAgent and InstallWorkflow
+// write; "" when there is no user layer.
+func (l *Loader) UserDir() string { return l.opts.UserDir }
+
+func (l *Loader) userBundle() string {
+	if l.opts.UserDir == "" {
+		return ""
+	}
+	return filepath.Join(l.opts.UserDir, UserID)
+}
+
+// AddDefinition adds or replaces a Go-built definition (owned by GoID)
+// and reloads. It replaces nothing from a bundle: a name a bundle also
+// defines is a bundle.id_conflict error, and the definition is not kept.
+func (l *Loader) AddDefinition(ctx context.Context, d *Definition) error {
+	if err := validGoDefinition(d); err != nil {
+		return err
+	}
+	l.mu.Lock()
+	prev := slices.Clone(l.defs)
+	l.defs = slices.DeleteFunc(slices.Clone(l.defs), func(x *Definition) bool { return x.Name == d.Name })
+	l.defs = append(l.defs, d)
+	l.mu.Unlock()
+	if _, err := l.live.Reload(ctx); err != nil {
+		l.mu.Lock()
+		l.defs = prev
+		l.mu.Unlock()
+		return loadError(err)
 	}
 	return nil
 }
 
-// ParseSource executes one in-memory definition source and returns its
-// declarations without cataloguing them. Relative file reads resolve
-// against root (may be nil when the source reads no files). It backs
-// runtime registration: define validates here before anything is stored.
-func ParseSource(root fs.FS, filename string, src []byte) (defs []*Definition, skills []*Skill, err error) {
-	col := &collector{file: filename, dir: path.Dir(filename)}
-	if root != nil {
-		col.read = func(name string) ([]byte, error) { return fs.ReadFile(root, name) }
-	} else {
-		col.read = func(name string) ([]byte, error) { return nil, fs.ErrNotExist }
-	}
-	ef := root
-	if ef == nil {
-		ef = emptyFS{}
-	}
-	if err := execDefFile(ef, filename, src, col); err != nil {
-		return nil, nil, err
-	}
-	for _, d := range col.defs {
-		d.SourceText = append([]byte(nil), src...)
-	}
-	return col.defs, col.skill, nil
+func lookup[T any](cat *bundle.Catalog, k *kind.Kind[T], name string) (T, bool) {
+	def, ok := bundle.Lookup(cat, k, name)
+	return def.Value, ok
 }
 
-type emptyFS struct{}
-
-func (emptyFS) Open(name string) (fs.File, error) { return nil, fs.ErrNotExist }
-
-// AddDefinition catalogues one in-memory definition (runtime define).
-// It shadows any same-named catalogued definition until the next Load.
-func (l *Loader) AddDefinition(d *Definition) {
-	l.ensureLoaded()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.defs == nil {
-		l.defs = map[string]*Definition{}
-	}
-	l.defs[d.Name] = d
-}
-
-// AddWorkflowSource catalogues one in-memory workflow source.
-func (l *Loader) AddWorkflowSource(name, src string, root fs.FS) {
-	l.ensureLoaded()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.workflowSrc == nil {
-		l.workflowSrc = map[string]string{}
-		l.workflowDir = map[string]fs.FS{}
-	}
-	l.workflowSrc[name] = src
-	l.workflowDir[name] = root
-}
-
-// ensureLoaded loads on first use so Roots(...).Resolve works without an
-// explicit Load in small programs; Load errors surface at Resolve.
-func (l *Loader) ensureLoaded() {
-	l.mu.RLock()
-	ok := l.loaded
-	l.mu.RUnlock()
-	if !ok {
-		_ = l.Load()
-	}
-}
-
-// ReloadIfChanged re-reads the roots when any catalogued file's content
-// changed (or files appeared/vanished). It reports whether a reload
-// happened. A failed reload keeps the previous catalogue.
-func (l *Loader) ReloadIfChanged() bool {
-	l.ensureLoaded()
-	l.mu.RLock()
-	prev := l.digest
-	l.mu.RUnlock()
-	// Cheap full re-hash: catalogues are small text files.
-	fresh := &Loader{roots: l.roots}
-	if err := fresh.Load(); err != nil {
-		return false
-	}
-	if fresh.digest == prev {
-		return false
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.defs, l.skills, l.workflowSrc, l.workflowDir = fresh.defs, fresh.skills, fresh.workflowSrc, fresh.workflowDir
-	l.digest = fresh.digest
-	l.Shadowed = fresh.Shadowed
-	return true
-}
-
-// Get returns the raw (unresolved) definition for name.
-func (l *Loader) Get(name string) (*Definition, bool) {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	d, ok := l.defs[name]
-	return d, ok
-}
-
-// Names returns definition names, sorted.
-func (l *Loader) Names() []string {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	out := make([]string, 0, len(l.defs))
-	for n := range l.defs {
-		out = append(out, n)
+func names[T any](cat *bundle.Catalog, k *kind.Kind[T]) []string {
+	defs := bundle.All(cat, k)
+	out := make([]string, 0, len(defs))
+	for _, def := range defs {
+		out = append(out, def.Ref.ID)
 	}
 	sort.Strings(out)
 	return out
 }
 
-// Skill returns a loaded skill by name.
-func (l *Loader) Skill(name string) (*Skill, bool) {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	s, ok := l.skills[name]
-	return s, ok
-}
+// Get returns the raw (unresolved) definition for name.
+func (l *Loader) Get(name string) (*Definition, bool) { return lookup(l.Catalog(), AgentKind, name) }
+
+// Names returns definition names, sorted.
+func (l *Loader) Names() []string { return names(l.Catalog(), AgentKind) }
+
+// Skill returns a skill by name.
+func (l *Loader) Skill(name string) (*Skill, bool) { return lookup(l.Catalog(), SkillKind, name) }
 
 // SkillBody returns a skill's body for the loop's skill built-in.
 func (l *Loader) SkillBody(name string) (string, bool) {
@@ -294,45 +276,12 @@ func (l *Loader) SkillBody(name string) (string, bool) {
 }
 
 // SkillNames returns skill names, sorted.
-func (l *Loader) SkillNames() []string {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	out := make([]string, 0, len(l.skills))
-	for n := range l.skills {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
+func (l *Loader) SkillNames() []string { return names(l.Catalog(), SkillKind) }
 
 // Workflows returns catalogued workflow names, sorted.
-func (l *Loader) Workflows() []string {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	out := make([]string, 0, len(l.workflowSrc))
-	for n := range l.workflowSrc {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
+func (l *Loader) Workflows() []string { return names(l.Catalog(), WorkflowKind) }
 
-// WorkflowSource returns a catalogued workflow's source.
-func (l *Loader) WorkflowSource(name string) (string, bool) {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	s, ok := l.workflowSrc[name]
-	return s, ok
-}
-
-// WorkflowFS returns the root filesystem a workflow's load()s resolve
-// against (nil when the workflow was registered without one).
-func (l *Loader) WorkflowFS(name string) fs.FS {
-	l.ensureLoaded()
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.workflowDir[name]
+// Workflow returns a catalogued workflow.
+func (l *Loader) Workflow(name string) (*Workflow, bool) {
+	return lookup(l.Catalog(), WorkflowKind, name)
 }

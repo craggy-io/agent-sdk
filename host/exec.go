@@ -396,7 +396,12 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	if s.defs == nil {
 		return Result{}, fmt.Errorf("host: no definition loader")
 	}
-	s.defs.ReloadIfChanged()
+	// Pick up edits to the definition layers. A failed reload keeps the
+	// previous catalogue; the trace says why.
+	if _, err := s.defs.Reload(ctx); err != nil {
+		_ = s.emit(ctx, trace.Event{Type: "agentdef.reload_failed", SessionID: s.id,
+			Data: mustJSON(map[string]any{"error": err.Error()})})
+	}
 	var resolved *agentdef.Resolved
 	var err error
 	if spec.Def != nil {

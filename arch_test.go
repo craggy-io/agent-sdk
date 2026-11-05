@@ -62,15 +62,16 @@ func TestArchitecture(t *testing.T) {
 			{
 				// "This module never imports a consumer." Consumers aren't
 				// listed anywhere, so this approximates the rule: the only
-				// craggy-io modules allowed are the two the README names as
-				// dependencies. A consumer reached through go.mod alone, or
-				// from a _test.go file, isn't seen here.
+				// craggy-io modules allowed are the three the README names
+				// as dependencies. A consumer reached through go.mod alone,
+				// or from a _test.go file, isn't seen here.
 				Name:   "never import a consumer",
-				Why:    "this module never imports a consumer (AGENTS.md, The import rule); its craggy-io dependencies are script-services and capability-services",
+				Why:    "this module never imports a consumer (AGENTS.md, The import rule); its craggy-io dependencies are foundation-kit, script-services and capability-services",
 				From:   []string{"./..."},
 				Forbid: []string{"github.com/craggy-io/..."},
 				Allow: []string{
 					"./...",
+					"github.com/craggy-io/foundation-kit/...",
 					"github.com/craggy-io/script-services/...",
 					"github.com/craggy-io/capability-services/...",
 				},

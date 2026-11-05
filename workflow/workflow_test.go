@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/defs"
 	"github.com/craggy-io/agent-sdk/host"
@@ -118,7 +117,7 @@ func openTest(t *testing.T, prov model.Provider, sink trace.Sink, view host.Tool
 	t.Helper()
 	s, err := host.Open(context.Background(), host.Options{
 		Config: config.Defaults(), View: view, Provider: prov,
-		Defs: agentdef.DirRoots(testRoot(t)), Trace: sink,
+		Defs: openDefs(t, testRoot(t)), Trace: sink,
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -602,8 +601,8 @@ func (p *resProvider) Model(ctx context.Context, id string) (model.ModelInfo, er
 }
 
 func TestShippedResWorkflows(t *testing.T) {
-	loader := defs.Builtin()
-	if err := loader.Load(); err != nil {
+	loader, err := defs.Builtin(context.Background())
+	if err != nil {
 		t.Fatal(err)
 	}
 	names := loader.Workflows()

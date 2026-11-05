@@ -22,12 +22,19 @@ import (
 func makeTraceDB(t *testing.T) (db, runID, nodeID, stepID string) {
 	t.Helper()
 	root := t.TempDir()
-	dir := filepath.Join(root, "agents")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "apiVersion: craggy.io/bundle/v1\nmetadata: {id: agentsdk.project, version: 1.0.0}\ncontributions:\n  - {id: base, kind: agentsdk.agent@1, path: agents/base.star}\n"
+	if err := os.WriteFile(filepath.Join(root, "bundle.yaml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	src := `agent(name = "base", profile = "default", prompt = [{"p": "You are base. The SYSTEM-ALPHA prompt."}], loop = loop_spec(completion = "text"))`
-	if err := os.WriteFile(filepath.Join(dir, "team.star"), []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "agents", "base.star"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defs, err := agentdef.Open(context.Background(), agentdef.Options{Project: root})
+	if err != nil {
 		t.Fatal(err)
 	}
 	db = filepath.Join(t.TempDir(), "trace.db")
@@ -48,7 +55,7 @@ func makeTraceDB(t *testing.T) (db, runID, nodeID, stepID string) {
 	)
 	s, err := host.Open(context.Background(), host.Options{
 		Config: config.Defaults(), View: view, Provider: prov,
-		Defs: agentdef.DirRoots(root), Trace: store,
+		Defs: defs, Trace: store,
 	})
 	if err != nil {
 		t.Fatal(err)

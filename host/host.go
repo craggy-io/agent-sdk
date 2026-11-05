@@ -321,10 +321,10 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	_ = s.emit(ctx, trace.Event{Type: "host.start", SessionID: s.id,
 		Data: mustJSON(map[string]any{"caller": s.root.ID, "epoch": s.epoch})})
 	if s.defs != nil {
-		_ = s.defs.Load()
-		for _, sh := range s.defs.Shadowed {
+		// One event per definition a higher layer replaced.
+		for _, o := range s.defs.Shadowed() {
 			_ = s.emit(ctx, trace.Event{Type: "agentdef.shadowed", SessionID: s.id,
-				Data: mustJSON(map[string]any{"shadowed": sh})})
+				Data: mustJSON(map[string]any{"target": o.Target.String(), "replacement": o.Replacement.String()})})
 		}
 	}
 	return s, nil

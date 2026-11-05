@@ -9,7 +9,8 @@
 //
 // Runtime registration is two-step by design: agents.define and
 // workflows.define add session-scoped Starlark definitions; promote
-// persists them as .star files only when the host's Approve hook
+// installs them in the host loader's user layer (agentdef.Loader
+// InstallAgent/InstallWorkflow) only when the host's Approve hook
 // accepts the exact bytes. Agents can propose definitions; they cannot
 // approve them. workflows.pending/answer carry the "host" tag: keep
 // them out of agent views.
@@ -33,14 +34,10 @@ import (
 
 // Options configures Register.
 type Options struct {
-	// Root is the resource root promote writes under
-	// (<Root>/agents/<name>.star, <Root>/workflows/<name>.star). It
-	// should be one of the host's definition roots so promoted
-	// definitions catalogue on reload.
-	Root string
 	// Approve gates promotion: called with kind ("agent"|"workflow"),
 	// the name, and the exact bytes that would be written. No Approve,
-	// no promotion.
+	// no promotion. Promotion writes into the user layer of the host's
+	// loader (agentdef.Options.UserDir); without one it is unavailable.
 	Approve func(ctx context.Context, kind, name string, payload []byte) bool
 	// Memory backs the memory.* capabilities. Nil uses an in-memory
 	// store scoped to this registration.
@@ -179,18 +176,15 @@ type defineIn struct {
 	Source     string          `json:"source,omitempty"`
 }
 
-func (s *service) execSpec(in *agentRunIn) (host.ExecSpec, error) {
+func (s *service) execSpec(ctx context.Context, in *agentRunIn) (host.ExecSpec, error) {
 	spec := host.ExecSpec{Task: in.Task, Profile: in.Profile, Thread: in.Thread, Vars: in.Vars}
 	switch {
 	case in.Source != "":
-		defs, _, err := agentdef.ParseSource(nil, "agents/dynamic.star", []byte(in.Source))
+		d, err := agentdef.ParseSource(ctx, []byte(in.Source))
 		if err != nil {
 			return spec, invalid("source: %v", err)
 		}
-		if len(defs) != 1 {
-			return spec, invalid("source must declare exactly one agent, got %d", len(defs))
-		}
-		spec.Def = defs[0]
+		spec.Def = d
 	case len(in.Definition) > 0:
 		d, err := definitionFromJSON(in.Definition)
 		if err != nil {
@@ -264,10 +258,10 @@ func (s *service) agentCaps() []registry.Capability {
 	ro := registry.WithEffects(registry.ReadOnly)
 	return []registry.Capability{
 		registry.Func("agents.list", "List agent definitions",
-			func(_ context.Context, _ struct{}) ([]agentListEntry, error) {
+			func(ctx context.Context, _ struct{}) ([]agentListEntry, error) {
 				out := []agentListEntry{}
 				if s.h.Defs() != nil {
-					s.h.Defs().ReloadIfChanged()
+					_, _ = s.h.Defs().Reload(ctx) // a failed reload keeps the previous catalogue
 					for _, n := range s.h.Defs().Names() {
 						e := agentListEntry{Name: n}
 						if r, err := s.h.Defs().Resolve(n, nil); err == nil {
@@ -311,7 +305,7 @@ func (s *service) agentCaps() []registry.Capability {
 			}, ro),
 		registry.Func("agents.run", "Run an agent to completion",
 			func(ctx context.Context, in agentRunIn) (agentRunOut, error) {
-				spec, err := s.execSpec(&in)
+				spec, err := s.execSpec(ctx, &in)
 				if err != nil {
 					return agentRunOut{}, err
 				}
@@ -320,7 +314,7 @@ func (s *service) agentCaps() []registry.Capability {
 			}, registry.AsLong(0), registry.Describe("Run a definition (by name, JSON definition, or Starlark source) on a task to completion.")),
 		registry.Func("agents.spawn", "Spawn a reusable agent handle",
 			func(ctx context.Context, in agentRunIn) (host.HandleInfo, error) {
-				spec, err := s.execSpec(&in)
+				spec, err := s.execSpec(ctx, &in)
 				if err != nil {
 					return host.HandleInfo{}, err
 				}
@@ -374,10 +368,10 @@ func (s *service) agentCaps() []registry.Capability {
 				return res, nil
 			}, ro),
 		registry.Func("agents.define", "Define a session-scoped agent",
-			func(_ context.Context, in defineIn) (json.RawMessage, error) {
-				return s.defineAgent(in)
+			func(ctx context.Context, in defineIn) (json.RawMessage, error) {
+				return s.defineAgent(ctx, in)
 			}, registry.Describe("Create a dynamic definition for this session from Starlark source or a JSON definition. It must extend an existing definition.")),
-		registry.Func("agents.promote", "Persist a dynamic definition to disk",
+		registry.Func("agents.promote", "Install a dynamic definition in the user layer",
 			func(ctx context.Context, in nameIn) (map[string]any, error) {
 				s.mu.Lock()
 				d, ok := s.dyn[in.Name]
@@ -417,45 +411,36 @@ func (s *service) agentCaps() []registry.Capability {
 	}
 }
 
-// defineAgent validates and stores a dynamic definition. Starlark
-// source may declare several agents; all are stored, and the resolved
-// form of the last is returned.
-func (s *service) defineAgent(in defineIn) (json.RawMessage, error) {
+// defineAgent validates and stores a dynamic definition: Starlark
+// source declaring exactly one agent, or a JSON definition. It returns
+// the resolved form.
+func (s *service) defineAgent(ctx context.Context, in defineIn) (json.RawMessage, error) {
 	if s.h.Defs() == nil {
 		return nil, registry.Errorf(registry.Unavailable, "no definition loader")
 	}
-	var defs []*agentdef.Definition
+	var d *agentdef.Definition
 	switch {
 	case in.Source != "":
-		parsed, _, err := agentdef.ParseSource(nil, "agents/dynamic.star", []byte(in.Source))
+		parsed, err := agentdef.ParseSource(ctx, []byte(in.Source))
 		if err != nil {
 			return nil, invalid("source: %v", err)
 		}
-		defs = parsed
+		d = parsed
 	case len(in.Definition) > 0:
-		d, err := definitionFromJSON(in.Definition)
+		parsed, err := definitionFromJSON(in.Definition)
 		if err != nil {
 			return nil, invalid("%v", err)
 		}
-		defs = []*agentdef.Definition{d}
+		d = parsed
 	default:
 		return nil, invalid("source or definition is required")
 	}
-	if len(defs) == 0 {
-		return nil, invalid("no agent declared")
-	}
-	var last *agentdef.Resolved
-	for _, d := range defs {
-		r, err := s.h.Defs().ResolveDynamic(*d, nil) // must extend a loaded def
-		if err != nil {
-			return nil, coded(err)
-		}
-		last = r
+	r, err := s.h.Defs().ResolveDynamic(*d, nil) // must extend a catalogued def
+	if err != nil {
+		return nil, coded(err)
 	}
 	s.mu.Lock()
-	for _, d := range defs {
-		s.dyn[d.Name] = &dynAgent{def: d, source: in.Source}
-	}
+	s.dyn[d.Name] = &dynAgent{def: d, source: in.Source}
 	s.mu.Unlock()
-	return json.Marshal(last)
+	return json.Marshal(r)
 }

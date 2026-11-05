@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/agenttest"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
@@ -77,7 +76,7 @@ func TestRebuildReconcilesCallsOpenAtCrash(t *testing.T) {
 		agenttest.TextResponse("never reached"),
 	)
 	opts := host.Options{ID: "crash-session", Config: config.Defaults(), View: echoView(),
-		Provider: prov, Defs: agentdef.DirRoots(testRoot(t)), Trace: sink}
+		Provider: prov, Defs: openDefs(t, testRoot(t)), Trace: sink}
 	s1, err := host.Open(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +152,7 @@ func TestRebuildLeavesSettledCallsAlone(t *testing.T) {
 		agenttest.TextResponse("done"),
 	)
 	opts := host.Options{ID: "clean-session", Config: config.Defaults(), View: echoView(),
-		Provider: prov, Defs: agentdef.DirRoots(testRoot(t)), Trace: sink}
+		Provider: prov, Defs: openDefs(t, testRoot(t)), Trace: sink}
 	s1, err := host.Open(ctx, opts)
 	if err != nil {
 		t.Fatal(err)

@@ -1,13 +1,20 @@
-// Package agentdef loads Starlark agent definitions and resolves
-// inheritance: ordered roots with shadowing, single-parent extends,
-// prompt fragment append/replace/remove, tool-filter union (max_effect
-// only ever tightens), template rendering with missingkey=error, and the
+// Package agentdef loads Starlark agent definitions, skills and
+// workflows, and resolves inheritance: single-parent extends, prompt
+// fragment append/replace/remove, tool-filter union (max_effect only
+// ever tightens), template rendering with missingkey=error, and the
 // skills catalogue appended last.
 //
-// A definition file is Starlark. Its top level calls agent(...) once per
-// agent and may call skill(...); skills may also come from
-// skills/<name>/SKILL.md files. Workflows are catalogued from
-// workflows/<name>.star and executed by package workflow.
+// Definitions are bundles (foundation-kit's bundle package): folders
+// whose bundle.yaml lists each agent (AgentKind, agentsdk.agent@1),
+// skill (SkillKind, SKILL.md) and workflow (WorkflowKind) as a
+// contribution whose id is its name. A folder without a bundle.yaml is
+// not loaded. Open holds them in a bundle.Live as layers, shipped then
+// user then project, each one bundle, where a higher layer replaces a
+// lower one by name. Agent and workflow files compile through
+// script-services' starcompile, so load() reaches the file's bundle and
+// its declared dependencies only.
+//
+// An agent file calls agent(...) exactly once:
 //
 //	agent(
 //	    name = "reviewer",
@@ -80,8 +87,8 @@ type Definition struct {
 	Delegates   []string         `json:"delegates,omitempty"`
 	Workflows   bool             `json:"workflows,omitempty"`
 	Loop        LoopSpec         `json:"loop,omitempty"`
-	// Source is the catalogue path that declared this definition
-	// (for example "agents/reviewers.star"); empty for Go-built ones.
+	// Source is the declaring file's path in its bundle (for example
+	// "agents/reviewer.star"); empty for Go-built ones.
 	Source string `json:"source,omitempty"`
 	// SourceText is the exact declaring file's bytes when loaded.
 	SourceText []byte `json:"-"`

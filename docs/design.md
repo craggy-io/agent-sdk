@@ -39,6 +39,13 @@ Resolution renders one system prompt (templates with
 `missingkey=error`, skills catalogue last) and records provenance for
 every field. Dynamic definitions must extend a loaded one.
 
+Definitions, skills and workflows are bundles (foundation-kit): each
+folder has a `bundle.yaml` listing one contribution per agent, skill or
+workflow, whose id is its name. Shipped, user and project layers are one
+bundle each; a higher layer replaces a lower one by name only through
+an explicit bundle override, and the catalog reloads whole or not at
+all.
+
 Tool filters: include/exclude globs, a max-effect cap, and an allow
 list exempt from the cap only. Effects rank read-only, then
 idempotent, then mutating (long ranks as mutating); unknown effects
@@ -121,13 +128,14 @@ registry is the whole integration: new Starlark scripts see it as a
 built-in, agents see it as a tool, with no host changes.
 
 Runtime registration is session-scoped (`define`) until a host
-approves the exact bytes (`promote`), which writes a `.star` file
-into a definition root.
+approves the exact bytes (`promote`), which installs the `.star` file,
+with its `bundle.yaml` entry, into the user definition layer.
 
 ## 10. Layout
 
 Flat public packages at the module root; heavy dependencies (SQLite,
-YAML) quarantined in `adapters/` nested modules; a debug CLI in
+config YAML) quarantined in `adapters/` nested modules (the root reads
+YAML only through foundation-kit's `bundle.yaml` parsing); a debug CLI in
 `cmd/craggy-agent` and a runnable host in `examples/host`, each a
 nested module. Dependencies point one way: `model`, `transcript`,
 `config`, `trace` at the bottom; `loop`; then `host`; `workflow` and
