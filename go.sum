@@ -1,7 +1,7 @@
 github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94 h1:TWF5beWn1w01bVK9LcqWxzCbwRoS1MK0CuhQ267uHwE=
 github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94/go.mod h1:a5Pl4976tZ59FxHykfWkIzxvHgkjD4qe16MBUtryWXM=
-github.com/craggy-io/foundation-kit v0.0.0-20261105234034-29ff228ac8d6 h1:+qGukseB+7JzXM8Tqc0bfJ32s9iYsPgArsdbShix31s=
-github.com/craggy-io/foundation-kit v0.0.0-20261105234034-29ff228ac8d6/go.mod h1:3LzurR78LiTu3uSB6g+QvVpc/wOraZgXa7sttq688wQ=
+github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc h1:8//J24BcVMqvdl7wtE8E+Z/Z6P3K/PJFWBOnXQnEVJ8=
+github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc/go.mod h1:3LzurR78LiTu3uSB6g+QvVpc/wOraZgXa7sttq688wQ=
 github.com/craggy-io/script-services v0.1.1-0.20261105222027-e9623d91c30d h1:OTkasLaV3KO6F3/n2Ui5rDJZtPeNZT9dj/3tNiA1jwQ=
 github.com/craggy-io/script-services v0.1.1-0.20261105222027-e9623d91c30d/go.mod h1:xm1suzLHa6gvLUafptRaz6cXncYIDqhY/xYB6wJG8RA=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

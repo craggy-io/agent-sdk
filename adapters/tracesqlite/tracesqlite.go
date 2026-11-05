@@ -9,9 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "modernc.org/sqlite" // driver "sqlite"
-
 	"github.com/craggy-io/agent-sdk/trace"
+	"github.com/craggy-io/foundation-kit/adapters/sqlite"
 )
 
 // DefaultLeaseTTL matches trace/memory.
@@ -50,17 +49,14 @@ type Store struct {
 var _ trace.Sink = (*Store)(nil)
 
 // Open opens (creating if needed) the trace database at path. Use
-// ":memory:" for an ephemeral database.
+// ":memory:" for an ephemeral database private to this Store.
 func Open(path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)"
-	if path == ":memory:" {
-		dsn = "file::memory:?cache=shared&_pragma=synchronous(FULL)"
-	}
-	db, err := sql.Open("sqlite", dsn)
+	// One connection, WAL, FULL sync and BEGIN IMMEDIATE, so lease claims are
+	// transactional and durable.
+	db, err := sqlite.Open(context.Background(), path, sqlite.Options{Synchronous: sqlite.SyncFull})
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("trace/sqlite: schema: %w", err)

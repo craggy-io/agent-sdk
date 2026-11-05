@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/craggy-io/agent-sdk/model"
+	"github.com/craggy-io/foundation-kit/retryafter"
 )
 
 // codeString normalises an error.code that may be a JSON string or number.
@@ -48,7 +49,7 @@ func MapHTTPError(status int, body []byte, retryAfter string) *model.Error {
 	if e.Message == "" {
 		e.Message = http.StatusText(status)
 	}
-	if d := parseRetryAfter(retryAfter); d > 0 {
+	if d, _ := retryafter.Delay(retryAfter, time.Now()); d > 0 {
 		e.RetryAfter = d
 	}
 	finalise(e)
@@ -109,24 +110,4 @@ func finalise(e *model.Error) {
 			e.Code = "provider_error"
 		}
 	}
-}
-
-// parseRetryAfter accepts delta-seconds or an HTTP date.
-func parseRetryAfter(v string) time.Duration {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return 0
-	}
-	if secs, err := strconv.Atoi(v); err == nil {
-		if secs < 0 {
-			return 0
-		}
-		return time.Duration(secs) * time.Second
-	}
-	if t, err := http.ParseTime(v); err == nil {
-		if d := time.Until(t); d > 0 {
-			return d
-		}
-	}
-	return 0
 }

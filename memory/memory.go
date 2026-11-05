@@ -15,6 +15,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/craggy-io/foundation-kit/fsx"
 )
 
 // ErrNotFound is returned by Get for a missing key.
@@ -111,7 +113,7 @@ func (s *MemStore) Delete(_ context.Context, ns, key string) error {
 }
 
 // FileStore is a Store persisted as one JSON document per namespace
-// under a directory. Writes are atomic (temp file + rename) and the
+// under a directory. Writes are atomic and durable (fsx.WriteFile) and the
 // whole namespace is rewritten per Put: right-sized for agent memory,
 // not a database.
 type FileStore struct {
@@ -158,11 +160,7 @@ func (s *FileStore) flushLocked(ns string) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(s.dir, ns+".json.tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(s.dir, ns+".json"))
+	return fsx.WriteFile(filepath.Join(s.dir, ns+".json"), b, 0o644)
 }
 
 func (s *FileStore) Put(ctx context.Context, ns, key string, value json.RawMessage) (Entry, error) {

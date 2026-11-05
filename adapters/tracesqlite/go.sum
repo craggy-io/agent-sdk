@@ -1,3 +1,7 @@
+github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc h1:8//J24BcVMqvdl7wtE8E+Z/Z6P3K/PJFWBOnXQnEVJ8=
+github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc/go.mod h1:3LzurR78LiTu3uSB6g+QvVpc/wOraZgXa7sttq688wQ=
+github.com/craggy-io/foundation-kit/adapters/sqlite v0.0.0-20261105234626-e7c70ea2ccbc h1:XgfezujlWXW4IG7FNP15JdJENs5O1rG8vmuMMEM3rWo=
+github.com/craggy-io/foundation-kit/adapters/sqlite v0.0.0-20261105234626-e7c70ea2ccbc/go.mod h1:E5rivgq8Hi5OFEeuCfJEDE3I/HWp0BcWappMsUZ1tMo=
 github.com/dustin/go-humanize v1.1.0 h1:dbKTrvD0klcbBV/h4AWJdMuZogJACoMlvWIWZ5b2xWg=
 github.com/dustin/go-humanize v1.1.0/go.mod h1:hc1CvRkJMsgxqjmjMQF3QNRAZBwY8AXBAzKYoSX9sFI=
 github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 h1:PlNWJRxu5APSV0pWqfIsZ0qt9OOGHSWfZQ4zvx+WgWs=
