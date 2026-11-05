@@ -1,5 +1,7 @@
 github.com/craggy-io/capability-services v0.1.0 h1:O3jnjBHT3e0Y+TE2/pu3v+uWx7NTkdOd9m0Vul2nM/U=
 github.com/craggy-io/capability-services v0.1.0/go.mod h1:IV0lo9NuT0EaTm16837jRQS7liZJQ8GvDMhcZX3k7oo=
+github.com/craggy-io/foundation-kit v0.0.0-20261105161744-a4c555eecf83 h1:iutXlTTKVSfaLea8f480M2tPNTcBfpUWX8P6CrHFHA4=
+github.com/craggy-io/foundation-kit v0.0.0-20261105161744-a4c555eecf83/go.mod h1:pxh2BEJDHbIYIGLbmLPCwqkqu42QY5JK5z0BpH9tdzo=
 github.com/craggy-io/script-services v0.1.0 h1:DF7qCCld4QdEKlFcl0xS8GapXIRoW75ioE+BAzMqWi0=
 github.com/craggy-io/script-services v0.1.0/go.mod h1:mdEwkrvplLuH7dR/gm/tZLyTM6V5gZjoY/oiDoAdnHE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
