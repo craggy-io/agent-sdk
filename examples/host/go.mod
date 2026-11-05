@@ -6,13 +6,13 @@ require (
 	github.com/craggy-io/agent-sdk v0.0.0
 	github.com/craggy-io/agent-sdk/adapters/configyaml v0.0.0
 	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.0.0
-	github.com/craggy-io/capability-services v0.1.0
-	github.com/craggy-io/foundation-kit v0.0.0-20261105161744-a4c555eecf83
+	github.com/craggy-io/capability-services v0.1.1-0.20261105222055-8de536911c24
+	github.com/craggy-io/foundation-kit v0.0.0-20261105211159-3c3442a425f9
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )
 
 require (
-	github.com/craggy-io/script-services v0.1.0 // indirect
+	github.com/craggy-io/script-services v0.1.1-0.20261105222027-e9623d91c30d // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
