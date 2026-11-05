@@ -9,8 +9,8 @@ require (
 )
 
 require (
-	github.com/craggy-io/capability-services v0.1.1-0.20261105222055-8de536911c24 // indirect
-	github.com/craggy-io/foundation-kit v0.0.0-20261105211159-3c3442a425f9 // indirect
+	github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94 // indirect
+	github.com/craggy-io/foundation-kit v0.0.0-20261105234034-29ff228ac8d6 // indirect
 	github.com/craggy-io/script-services v0.1.1-0.20261105222027-e9623d91c30d // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect

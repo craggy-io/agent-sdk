@@ -2,11 +2,8 @@ package agentdef
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io/fs"
 	"path"
-	"strings"
 	"testing/fstest"
 
 	"github.com/craggy-io/foundation-kit/bundle"
@@ -161,7 +158,8 @@ func compileWorkflow(_ context.Context, u *starcompile.Unit) (bundle.Compiled[*W
 // and agents.define with source, and promote's validation), which must
 // declare exactly one agent. The result is not catalogued. The source goes
 // through the same compiler as a bundle's agent file, as a lone file:
-// there is nothing to load() and no prompt or schema file to read.
+// there is nothing to load() and no prompt or schema file to read. A
+// failure is a *bundle.LoadError holding starcompile's diagnostics.
 func ParseSource(ctx context.Context, src []byte) (*Definition, error) {
 	const file = "dynamic.star"
 	c := bundle.Contribution{
@@ -173,43 +171,11 @@ func ParseSource(ctx context.Context, src []byte) (*Definition, error) {
 	}
 	u, diags := starcompile.New(ctx, c, agentOptions())
 	if u == nil {
-		return nil, diagnosticsError(diags)
+		return nil, &bundle.LoadError{Diagnostics: diags}
 	}
 	d, diags := buildAgent(ctx, u)
 	if d == nil {
-		return nil, diagnosticsError(diags)
+		return nil, &bundle.LoadError{Diagnostics: diags}
 	}
 	return d, nil
-}
-
-// diagnosticsError lists every error diagnostic as path:line:col: message.
-func diagnosticsError(diags []bundle.Diagnostic) error {
-	var parts []string
-	for _, d := range diags {
-		if d.Severity != bundle.SeverityError {
-			continue
-		}
-		parts = append(parts, formatDiagnostic(d))
-	}
-	if len(parts) == 0 {
-		return errors.New("agentdef: compile failed")
-	}
-	return fmt.Errorf("agentdef: %s", strings.Join(parts, "; "))
-}
-
-func formatDiagnostic(d bundle.Diagnostic) string {
-	pos := d.Path
-	if d.Bundle != "" && pos != "" {
-		pos = d.Bundle + ":" + pos
-	}
-	if d.Line > 0 {
-		pos = fmt.Sprintf("%s:%d", pos, d.Line)
-		if d.Column > 0 {
-			pos = fmt.Sprintf("%s:%d", pos, d.Column)
-		}
-	}
-	if pos == "" {
-		return fmt.Sprintf("%s (%s)", d.Message, d.Code)
-	}
-	return fmt.Sprintf("%s: %s (%s)", pos, d.Message, d.Code)
 }

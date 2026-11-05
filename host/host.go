@@ -322,7 +322,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		Data: mustJSON(map[string]any{"caller": s.root.ID, "epoch": s.epoch})})
 	if s.defs != nil {
 		// One event per definition a higher layer replaced.
-		for _, o := range s.defs.Shadowed() {
+		for _, o := range s.defs.Catalog().Overrides() {
 			_ = s.emit(ctx, trace.Event{Type: "agentdef.shadowed", SessionID: s.id,
 				Data: mustJSON(map[string]any{"target": o.Target.String(), "replacement": o.Replacement.String()})})
 		}

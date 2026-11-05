@@ -55,8 +55,8 @@ capability-services (`arch_test.go` enforces the list).
    `adapters/tracesqlite` for durable runs. One writer owns a sink; close it
    after the host.
 3. Definitions: `agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(),
-   UserDir: ..., Project: ...})`, or `defs.Builtin(ctx)` for the embedded set
-   alone. Definitions name profiles, never models. See "Definition bundles".
+   UserDir: ..., Project: ...})`; leave out the other layers for the
+   embedded set alone. Definitions name profiles, never models. See "Definition bundles".
 4. Host: `host.Open(ctx, host.Options{...})`; close in reverse order
    (host, then sink, then module sources).
 5. Capabilities (optional): `agentcap.Register(r, h, agentcap.Options{...})`
@@ -83,8 +83,8 @@ capability-services (`arch_test.go` enforces the list).
   without `bundle.yaml` is an error.
 - Runtime changes go through the `bundle.Live`: `Reload`,
   `AddDefinition` (Go-built definitions, a `kind.Provider`) and
-  `InstallAgent`/`InstallWorkflow` (promote rewrites the user bundle and
-  its `bundle.yaml` through `Live.Install`).
+  `InstallAgent`/`InstallWorkflow` (promote adds the file and its
+  `bundle.yaml` entry to the user bundle through `Live.Edit`).
 
 ## Semantics that must not drift
 

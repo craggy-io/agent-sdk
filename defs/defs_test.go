@@ -5,12 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/defs"
 )
 
 // The shipped catalogue loads and every built-in agent resolves.
 func TestBuiltinCatalogueResolves(t *testing.T) {
-	l, err := defs.Builtin(context.Background())
+	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source()})
 	if err != nil {
 		t.Fatal(err)
 	}

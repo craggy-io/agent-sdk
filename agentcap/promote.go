@@ -15,7 +15,7 @@ import (
 // Promotion: a dynamic definition or workflow is installed in the user
 // layer of the host's loader (agentdef.Loader.InstallAgent and
 // InstallWorkflow, which add the file and its bundle.yaml entry through
-// bundle.Live.Install) only when the host's Approve hook accepts the exact
+// bundle.Live.Edit; the bundle validates the name) only when the host's Approve hook accepts the exact
 // bytes. Agents can propose a definition; they cannot approve it.
 
 func (s *service) approve(ctx context.Context, kind, name string, payload []byte) error {
@@ -31,15 +31,8 @@ func (s *service) approve(ctx context.Context, kind, name string, payload []byte
 	return nil
 }
 
-func validName(name string) bool {
-	return name != "" && !strings.ContainsAny(name, "/\\") && !strings.Contains(name, "..")
-}
-
 func (s *service) promoteAgent(ctx context.Context, d *dynAgent) (string, error) {
 	name := d.def.Name
-	if !validName(name) {
-		return "", invalid("invalid agent name %q", name)
-	}
 	src := d.source
 	if src == "" {
 		var err error
@@ -67,16 +60,10 @@ func (s *service) promoteAgent(ctx context.Context, d *dynAgent) (string, error)
 		return "", err
 	}
 	p, err := s.h.Defs().InstallAgent(ctx, name, []byte(src))
-	if err != nil {
-		return "", coded(err)
-	}
-	return p, nil
+	return p, coded(err)
 }
 
 func (s *service) promoteWorkflow(ctx context.Context, name, source string) (string, error) {
-	if !validName(name) {
-		return "", invalid("invalid workflow name %q", name)
-	}
 	if strings.TrimSpace(source) == "" || !strings.Contains(source, "WORKFLOW") ||
 		!strings.Contains(source, "def run") {
 		return "", invalid("workflow %q source lacks WORKFLOW/def run", name)
@@ -85,10 +72,7 @@ func (s *service) promoteWorkflow(ctx context.Context, name, source string) (str
 		return "", err
 	}
 	p, err := s.h.Defs().InstallWorkflow(ctx, name, []byte(source))
-	if err != nil {
-		return "", coded(err)
-	}
-	return p, nil
+	return p, coded(err)
 }
 
 // q renders a Starlark string literal.

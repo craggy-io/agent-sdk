@@ -6,8 +6,8 @@ require (
 	github.com/craggy-io/agent-sdk v0.0.0
 	github.com/craggy-io/agent-sdk/adapters/configyaml v0.0.0
 	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.0.0
-	github.com/craggy-io/capability-services v0.1.1-0.20261105222055-8de536911c24
-	github.com/craggy-io/foundation-kit v0.0.0-20261105211159-3c3442a425f9
+	github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94
+	github.com/craggy-io/foundation-kit v0.0.0-20261105234034-29ff228ac8d6
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )
 

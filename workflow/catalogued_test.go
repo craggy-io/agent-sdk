@@ -2,6 +2,7 @@ package workflow_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -67,7 +68,8 @@ func TestCataloguedWorkflowChecked(t *testing.T) {
 		"bundle.yaml": {Data: []byte("apiVersion: craggy.io/bundle/v1\nmetadata: {id: agentsdk.shipped, version: 1.0.0}\ncontributions:\n  - {id: bad, kind: agentsdk.workflow@1, path: bad.star}\n")},
 		"bad.star":    {Data: []byte("WORKFLOW = workflow(description = \"x\")\n\ndef run(input):\n    return nope()\n")},
 	})})
-	if err == nil || !strings.Contains(err.Error(), "bad.star:4") || !strings.Contains(err.Error(), "nope") {
+	var le *bundle.LoadError
+	if !errors.As(err, &le) || le.Diagnostics[0].Path != "bad.star" || le.Diagnostics[0].Line != 4 || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("err=%v", err)
 	}
 }

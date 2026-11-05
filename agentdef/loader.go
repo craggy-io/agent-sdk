@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/craggy-io/foundation-kit/bundle"
@@ -41,9 +39,8 @@ type Options struct {
 	// UserDir holds the user layer: the bundle at
 	// <UserDir>/agentsdk.user (metadata.id UserID). It is where
 	// InstallAgent and InstallWorkflow write (agents.promote and
-	// workflows.promote), through bundle.Live.Install, which places a
-	// bundle at <dir>/<metadata.id>; other folders in UserDir are not
-	// read. A missing agentsdk.user folder is no user layer yet. "": none.
+	// workflows.promote), through bundle.Live.Edit; other folders in
+	// UserDir are not read. A missing agentsdk.user folder is no user layer yet. "": none.
 	UserDir string
 	// Project is the top layer: a bundle directory whose metadata.id is
 	// ProjectID. A missing directory is skipped. "": none.
@@ -70,13 +67,11 @@ type Loader struct {
 
 	mu   sync.Mutex // guards defs
 	defs []*Definition
-
-	installMu sync.Mutex // serializes InstallAgent/InstallWorkflow
 }
 
 // Open loads the layers. The first load must succeed: a layer folder
 // without a bundle.yaml, a file that fails its check or top level, or a
-// name two non-layer bundles share is an error listing every problem.
+// name two non-layer bundles share is a *bundle.LoadError.
 func Open(ctx context.Context, opts Options) (*Loader, error) {
 	l := &Loader{opts: opts, compilers: Compilers()}
 	l.opts.Sources = slices.Clone(opts.Sources)
@@ -88,7 +83,7 @@ func Open(ctx context.Context, opts Options) (*Loader, error) {
 	}
 	live, err := bundle.NewLive(ctx, l.options)
 	if err != nil {
-		return nil, loadError(err)
+		return nil, err
 	}
 	l.live = live
 	return l, nil
@@ -103,12 +98,10 @@ func (l *Loader) options(context.Context) (bundle.Options, error) {
 		o.Sources = append(o.Sources, l.opts.Shipped)
 		layers = append(layers, ShippedID)
 	}
+	// A missing layer folder is no layer; any other folder is loaded, so
+	// one without a bundle.yaml is bundle.manifest_missing.
 	for _, layer := range []struct{ id, dir string }{{UserID, l.userBundle()}, {ProjectID, l.opts.Project}} {
-		ok, err := layerPresent(layer.id, layer.dir)
-		if err != nil {
-			return bundle.Options{}, err
-		}
-		if ok {
+		if _, err := os.Stat(layer.dir); layer.dir != "" && !errors.Is(err, fs.ErrNotExist) {
 			o.Sources = append(o.Sources, bundle.Dir(layer.dir))
 			layers = append(layers, layer.id)
 		}
@@ -123,30 +116,6 @@ func (l *Loader) options(context.Context) (bundle.Options, error) {
 		o.Providers = []kind.Provider{goProvider(defs)}
 	}
 	return o, nil
-}
-
-// layerPresent reports whether a layer folder exists. One without a
-// bundle.yaml is an error: the folder is meant to be a layer.
-func layerPresent(id, dir string) (bool, error) {
-	if dir == "" {
-		return false, nil
-	}
-	st, err := os.Stat(dir)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return false, nil
-	case err != nil:
-		return false, fmt.Errorf("agentdef: layer %s: %w", id, err)
-	case !st.IsDir():
-		return false, fmt.Errorf("agentdef: layer %s: %s is not a folder", id, dir)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "bundle.yaml")); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, fmt.Errorf("agentdef: layer %s: %s has no bundle.yaml; a definition folder needs one, with metadata.id %s, listing its agents, skills and workflows", id, dir, id)
-		}
-		return false, fmt.Errorf("agentdef: layer %s: %w", id, err)
-	}
-	return true, nil
 }
 
 // goProvider holds the Go-built definitions. A built-in has no bytes to
@@ -169,46 +138,14 @@ func validGoDefinition(d *Definition) error {
 	return ValidateMaxEffect(d.Name, d.Tools.MaxEffect)
 }
 
-// loadFailure lists every diagnostic of a failed load.
-type loadFailure struct{ err *bundle.LoadError }
-
-func (e loadFailure) Error() string {
-	parts := make([]string, 0, len(e.err.Diagnostics))
-	for _, d := range e.err.Diagnostics {
-		if d.Severity == bundle.SeverityError {
-			parts = append(parts, formatDiagnostic(d))
-		}
-	}
-	return "agentdef: definitions failed to load: " + strings.Join(parts, "; ")
-}
-
-func (e loadFailure) Unwrap() error { return e.err }
-
-// loadError wraps a bundle load error so its message lists every problem;
-// errors.As still finds the *bundle.LoadError.
-func loadError(err error) error {
-	var le *bundle.LoadError
-	if errors.As(err, &le) {
-		return loadFailure{le}
-	}
-	return err
-}
-
 // Catalog returns the current catalog. It never blocks; read everything
 // one task needs from a single catalog.
 func (l *Loader) Catalog() *bundle.Catalog { return l.live.Catalog() }
 
 // Reload loads the layers again (bundle.Live.Reload) and reports whether
 // the catalog changed. On failure the previous catalog stays current and
-// the error lists every problem.
-func (l *Loader) Reload(ctx context.Context) (bool, error) {
-	changed, err := l.live.Reload(ctx)
-	return changed, loadError(err)
-}
-
-// Shadowed returns every definition a higher layer replaced, from the
-// current catalog (bundle.Catalog.Overrides).
-func (l *Loader) Shadowed() []bundle.Override { return l.Catalog().Overrides() }
+// the error is returned, usually a *bundle.LoadError.
+func (l *Loader) Reload(ctx context.Context) (bool, error) { return l.live.Reload(ctx) }
 
 // UserDir returns Options.UserDir, where InstallAgent and InstallWorkflow
 // write; "" when there is no user layer.
@@ -237,7 +174,7 @@ func (l *Loader) AddDefinition(ctx context.Context, d *Definition) error {
 		l.mu.Lock()
 		l.defs = prev
 		l.mu.Unlock()
-		return loadError(err)
+		return err
 	}
 	return nil
 }

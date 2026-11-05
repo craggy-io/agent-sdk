@@ -283,7 +283,7 @@ contributions:
 		}
 	}
 	var shadowed []string
-	for _, o := range l.Shadowed() {
+	for _, o := range l.Catalog().Overrides() {
 		shadowed = append(shadowed, o.Target.String()+">"+o.Replacement.String())
 	}
 	want := "agentsdk.shipped#assistant>agentsdk.project#assistant,agentsdk.shipped#reviewer>agentsdk.user#reviewer,agentsdk.user#assistant>agentsdk.project#assistant"
@@ -341,7 +341,7 @@ func TestInstallAgent(t *testing.T) {
 		t.Errorf("quick not replaced: %+v", r)
 	}
 	manifest, err := os.ReadFile(filepath.Join(userDir, agentdef.UserID, "bundle.yaml"))
-	if err != nil || strings.Count(string(manifest), `id: "quick"`) != 1 || !strings.Contains(string(manifest), `id: "reviewer"`) {
+	if err != nil || strings.Count(string(manifest), "id: quick") != 1 || !strings.Contains(string(manifest), "id: reviewer") {
 		t.Fatalf("manifest=%s err=%v", manifest, err)
 	}
 	// A wrong name fails the install's load and changes nothing.

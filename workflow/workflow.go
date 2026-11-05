@@ -173,11 +173,12 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 }
 
 // resolveSource returns the catalogued workflow nameOrSource names (after
-// a reload), or nil and the source text itself for ad-hoc source.
+// a reload), or an empty Workflow and the source text itself for ad-hoc
+// source.
 func resolveSource(ctx context.Context, s *host.Host, nameOrSource string) (*agentdef.Workflow, string, error) {
 	trimmed := strings.TrimSpace(nameOrSource)
 	if strings.Contains(trimmed, "\n") || strings.Contains(trimmed, "WORKFLOW") || strings.HasPrefix(trimmed, "#") {
-		return nil, nameOrSource, nil
+		return &agentdef.Workflow{}, nameOrSource, nil
 	}
 	if s.Defs() != nil {
 		_, _ = s.Defs().Reload(ctx) // a failed reload keeps the previous catalogue
@@ -207,8 +208,7 @@ func hash16(v any) string {
 type exec struct {
 	ctx     context.Context
 	s       *host.Host
-	name    string             // catalogued name, "" for ad-hoc source
-	wf      *agentdef.Workflow // the catalogued script; nil Unit for ad-hoc or uncatalogued source
+	wf      *agentdef.Workflow // catalogued name ("" for ad-hoc source) and script (nil Unit when not catalogued)
 	source  string
 	runID   string // workflow run ID (journal scope)
 	nodeID  string // workflow node ID in the trace
@@ -258,13 +258,7 @@ func (e *exec) noteUsage(u model.Usage) {
 }
 
 func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source string, input map[string]any, opts Options) (Result, error) {
-	name := ""
-	if wf != nil {
-		name = wf.Name
-	} else {
-		wf = &agentdef.Workflow{}
-	}
-	e := &exec{ctx: ctx, s: s, name: name, wf: wf, source: source, resume: opts.Resume,
+	e := &exec{ctx: ctx, s: s, wf: wf, source: source, resume: opts.Resume,
 		lim: opts.Limits, runID: opts.RunID, nodeID: model.NewID()}
 	if e.runID == "" {
 		// Prefer the enclosing session run so trace tree queries join.
@@ -281,7 +275,7 @@ func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source st
 	}
 	e.path = opts.NodePath
 	if e.path == "" {
-		e.path = name
+		e.path = wf.Name
 		if e.path == "" {
 			e.path = "wf:" + hashBytes([]byte(source))[:8]
 		}
@@ -383,7 +377,7 @@ func (e *exec) pinStart(ctx context.Context, input map[string]any) error {
 	if err != nil {
 		return err
 	}
-	p := pin{Name: e.name, SourceHash: hashBytes([]byte(e.source)), SourceBlob: srcHash,
+	p := pin{Name: e.wf.Name, SourceHash: hashBytes([]byte(e.source)), SourceBlob: srcHash,
 		InputBlob: inHash, ConfigHash: configHash(e.s), RuntimeVersion: RuntimeVersion, Path: e.path}
 	b, _ := json.Marshal(p)
 	return e.journal.rec.Emit(ctx, trace.Event{Type: "wf.start", SessionID: e.s.ID(),
@@ -440,8 +434,8 @@ func (e *exec) loadScript(ctx context.Context, thread *starlark.Thread) (starlar
 		// Ad-hoc source (or a pinned workflow no longer catalogued) has
 		// no bundle, so nothing to load().
 		filename = "<workflow-source>"
-		if e.name != "" {
-			filename = "workflows/" + e.name + ".star"
+		if e.wf.Name != "" {
+			filename = "workflows/" + e.wf.Name + ".star"
 		}
 		_, err := script.Run(ctx, e.limits(), thread, func() (starlark.Value, error) {
 			g, err := starlark.ExecFileOptions(dialect.FileOptions, thread, filename, e.source, predeclared(e))

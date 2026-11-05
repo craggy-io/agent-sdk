@@ -126,7 +126,7 @@ func TestDefinePromoteRoundTrip(t *testing.T) {
 		t.Fatalf("written=%q err=%v", written, err)
 	}
 	manifest, err := os.ReadFile(filepath.Join(user, "bundle.yaml"))
-	if err != nil || !strings.Contains(string(manifest), `{id: "quick", kind: agentsdk.agent@1, path: "agents/quick.star"}`) {
+	if err != nil || !strings.Contains(string(manifest), "path: agents/quick.star") {
 		t.Fatalf("manifest=%s err=%v", manifest, err)
 	}
 	// The running host catalogues it at once.

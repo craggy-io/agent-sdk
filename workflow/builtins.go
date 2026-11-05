@@ -856,10 +856,7 @@ func builtinWorkflowRun(e *exec, _ *starlark.Thread, args starlark.Tuple, kwargs
 	if err != nil {
 		return nil, err
 	}
-	name := ""
-	if wf != nil {
-		name = wf.Name
-	}
+	name := wf.Name
 	childPath := name
 	if childPath == "" {
 		childPath = "wf:" + hashBytes([]byte(source))[:8]

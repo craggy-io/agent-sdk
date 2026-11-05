@@ -6,7 +6,6 @@
 package defs
 
 import (
-	"context"
 	"embed"
 
 	"github.com/craggy-io/foundation-kit/bundle"
@@ -19,8 +18,3 @@ var embedded embed.FS
 
 // Source is the shipped bundle, for agentdef.Options.Shipped.
 func Source() bundle.Source { return bundle.Embedded(agentdef.ShippedID, embedded) }
-
-// Builtin opens a loader over just the shipped layer.
-func Builtin(ctx context.Context) (*agentdef.Loader, error) {
-	return agentdef.Open(ctx, agentdef.Options{Shipped: Source()})
-}

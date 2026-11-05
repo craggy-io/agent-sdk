@@ -20,10 +20,9 @@ definition) or a JSON `definition`; `workflows.define` takes a name
 and source. Both are session-scoped. `promote` installs the agent or
 workflow in the user layer of the host's loader
 (`agentdef.Options.UserDir`): the file, `agents/<name>.star` or
-`workflows/<name>.star` unless the user bundle already declares it
-elsewhere, and its entry in the user bundle's `bundle.yaml`, written
-under `<UserDir>/agentsdk.user` with `bundle.Live.Install`
-(`Loader.InstallAgent`/`InstallWorkflow`). It runs only when
+`workflows/<name>.star`, and its entry in the user bundle's
+`bundle.yaml`, written under `<UserDir>/agentsdk.user` with
+`bundle.Live.Edit` (`Loader.InstallAgent`/`InstallWorkflow`). It runs only when
 `Options.Approve` accepts the exact bytes (validated first: agents
 must parse and resolve), and the install is rolled back if the
 catalogue then fails to load. Without a user layer, promote is

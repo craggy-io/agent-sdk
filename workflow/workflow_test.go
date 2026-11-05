@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/defs"
 	"github.com/craggy-io/agent-sdk/host"
@@ -601,7 +602,7 @@ func (p *resProvider) Model(ctx context.Context, id string) (model.ModelInfo, er
 }
 
 func TestShippedResWorkflows(t *testing.T) {
-	loader, err := defs.Builtin(context.Background())
+	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source()})
 	if err != nil {
 		t.Fatal(err)
 	}

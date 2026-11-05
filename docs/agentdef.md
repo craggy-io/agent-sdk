@@ -53,10 +53,12 @@ one bundle with a fixed `metadata.id`:
 | project | `Project` | the directory itself | `agentsdk.project` |
 
 User replaces shipped and project replaces user (and shipped), by id,
-through a `BundleOverride` chain; `Loader.Shadowed()`
-(`Catalog.Overrides`) lists what was replaced, and `host.Open` traces
+through a `BundleOverride` chain; `Catalog().Overrides()` lists what
+was replaced, and `host.Open` traces
 one `agentdef.shadowed` event per replacement. A missing layer folder
-is skipped; a folder without `bundle.yaml` is an error. `Sources` adds
+is skipped; a folder without `bundle.yaml` is
+`bundle.manifest_missing`. Load failures are `*bundle.LoadError`s;
+read `Diagnostics` for every problem and its position. `Sources` adds
 other bundles (libraries, extra definitions) and `Definitions` adds
 Go-built definitions (owner `agentsdk.go`); neither replaces anything,
 so a shared name is a conflict.
@@ -65,11 +67,11 @@ so a shared name is a conflict.
 all, so a bad edit keeps the previous catalogue. The host reloads before
 resolving each run and traces a failed reload as `agentdef.reload_failed`. `AddDefinition` adds or replaces a Go-built
 definition and reloads. `InstallAgent` and `InstallWorkflow` (behind
-`agents.promote`/`workflows.promote`) rewrite the user bundle: the file,
-at the path the bundle already declares or `agents/<name>.star` /
-`workflows/<name>.star`, plus its `bundle.yaml` entry, installed with
-`bundle.Live.Install` at `<UserDir>/agentsdk.user` and rolled back if
-the reload fails. Other folders in `UserDir` are not read.
+`agents.promote`/`workflows.promote`) write `agents/<name>.star` /
+`workflows/<name>.star` and its `bundle.yaml` entry into the user bundle
+with `bundle.Live.Edit` at `<UserDir>/agentsdk.user`, rolled back if the
+reload fails. Edit rewrites `bundle.yaml` with foundation-kit's encoder,
+so comments in it are not kept. Other folders in `UserDir` are not read.
 
 ## Definitions
 
