@@ -1,3 +1,9 @@
+github.com/craggy-io/agent-sdk v0.1.0 h1:po9QjUVVXghFeCnnh1aAIw1yHQ32oUM2SAYI0B94/e8=
+github.com/craggy-io/agent-sdk v0.1.0/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
+github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.0 h1:+AL4BG8tIEM47JySD/wJtVPrT5urFyrSe2RlaA0cyvg=
+github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.0/go.mod h1:Dkrvqcj8bICxs9upjtmTJVv+vpXxLZ6dnksDBGOFnlk=
+github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.0 h1:0zrvoWjPTsqYrX78OqxVk0xEfyGiFqZyWXbanwhkAyc=
+github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.0/go.mod h1:VxXnZLsmbGUogBagNQmnFbc1e1f7oePQNb4iquHhE1E=
 github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94 h1:TWF5beWn1w01bVK9LcqWxzCbwRoS1MK0CuhQ267uHwE=
 github.com/craggy-io/capability-services v0.1.1-0.20261105234106-63e308282f94/go.mod h1:a5Pl4976tZ59FxHykfWkIzxvHgkjD4qe16MBUtryWXM=
 github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc h1:8//J24BcVMqvdl7wtE8E+Z/Z6P3K/PJFWBOnXQnEVJ8=

@@ -144,9 +144,11 @@ for m in adapters/tracesqlite adapters/configyaml cmd/craggy-agent examples/host
 done
 ```
 
-The nested modules carry `replace` directives at this module until
-the first tag; the adapters keep heavy dependencies (SQLite, config
-YAML) out of the core module graph.
+The nested modules depend on tagged releases of this module (no
+`replace` directives): release the core first, then the adapters
+(`adapters/<name>/vX.Y.Z` tags), then move `cmd/craggy-agent` and
+`examples/host` to them. The adapters keep heavy dependencies (SQLite,
+config YAML) out of the core module graph.
 
 Live OpenRouter tests are skipped unless `OPENROUTER_API_KEY` is set and
 `AGENT_SDK_LIVE=1`.

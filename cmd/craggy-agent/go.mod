@@ -3,9 +3,9 @@ module github.com/craggy-io/agent-sdk/cmd/craggy-agent
 go 1.27.0
 
 require (
-	github.com/craggy-io/agent-sdk v0.0.0
-	github.com/craggy-io/agent-sdk/adapters/configyaml v0.0.0-00010101000000-000000000000
-	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.0.0
+	github.com/craggy-io/agent-sdk v0.1.0
+	github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.0
+	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.0
 )
 
 require (
@@ -28,9 +28,3 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.61.0 // indirect
 )
-
-replace github.com/craggy-io/agent-sdk => ../..
-
-replace github.com/craggy-io/agent-sdk/adapters/configyaml => ../../adapters/configyaml
-
-replace github.com/craggy-io/agent-sdk/adapters/tracesqlite => ../../adapters/tracesqlite
