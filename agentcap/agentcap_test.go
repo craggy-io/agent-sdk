@@ -171,7 +171,8 @@ func TestPromoteWorkflow(t *testing.T) {
 	}, root)
 	src := "WORKFLOW = workflow(description = \"Say hi.\")\n\ndef run(input):\n    return {\"hi\": True}\n"
 	out := invoke(t, r, "workflows.promote", map[string]any{"name": "hi", "source": src})
-	if !strings.Contains(string(out), filepath.Join(agentdef.UserID, "workflows", "hi.star")) {
+	var promoted struct{ Path string }
+	if err := json.Unmarshal(out, &promoted); err != nil || !strings.HasSuffix(promoted.Path, filepath.Join(agentdef.UserID, "workflows", "hi.star")) {
 		t.Fatalf("promote=%s", out)
 	}
 	out = invoke(t, r, "workflows.list", map[string]any{})
