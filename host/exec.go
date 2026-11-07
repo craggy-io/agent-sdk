@@ -528,12 +528,6 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	}
 
 	policy := policyFrom(eff, resolved, spec)
-	skills := map[string]string{}
-	for _, name := range resolved.Skills {
-		if body, ok := s.defs.SkillBody(name); ok {
-			skills[name] = body
-		}
-	}
 	act := &activation{target: mailTarget, armed: spec.armFollow}
 	in := loop.Input{
 		NodeID: nodeID, RunID: run.id, SessionID: s.id, DefName: resolved.Name,
@@ -553,7 +547,7 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 		Join: func(ctx context.Context) ([]model.Item, bool) {
 			return s.join(ctx, nc, act)
 		},
-		Skills: skills,
+		Skills: resolved.SkillBodies,
 	}
 	res, runErr := loop.Run(nodeCtxVal, loop.Deps{
 		Provider: s.provider, Tools: view, Trace: s.recorder,

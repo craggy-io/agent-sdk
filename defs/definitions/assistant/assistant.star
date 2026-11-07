@@ -1,5 +1,5 @@
 # assistant: interactive work, delegating review to the reviewer.
-load("./lib/common.star", "fragment")
+load("@agentsdk.shared.common/common.star", "fragment")
 
 agent(
     name = "assistant",

@@ -38,40 +38,54 @@ bundle cannot use one id for two kinds.
 `dependencies` (pass those in `Options.Sources`). Modules an agent file
 loads see `tools_filter`, `loop_spec` and `schema`, not `agent`. Prompt
 `{"file": ...}` fragments and `loop.output` schema files are read from
-the agent file's bundle, relative to the file; a path outside the
+the agent file's bundle, relative to the file, or a declared `@bundle.id/path` dependency; a path outside the
 bundle, or a symbolic link, fails to load.
 
 ## Layers
 
-`Open(ctx, Options)` holds the catalog in a `bundle.Live`. Each layer is
-one bundle with a fixed `metadata.id`:
+`Open(ctx, Options)` holds the composed catalog in a `bundle.Live`.
+Each layer contains any number of independently identified bundles:
 
-| Layer | Option | Bundle | `metadata.id` |
-| --- | --- | --- | --- |
-| shipped | `Shipped` (usually `defs.Source()`) | any `bundle.Source` | `agentsdk.shipped` |
-| user | `UserDir` | `<UserDir>/agentsdk.user` | `agentsdk.user` |
-| project | `Project` | the directory itself | `agentsdk.project` |
+| Layer | Option | Discovery |
+| --- | --- | --- |
+| shipped | `Shipped` (usually `defs.Sources()`) | explicit `[]bundle.Source` |
+| user | `UserDir` | recursively discovered bundle tree |
+| project | `Project` | recursively discovered bundle tree |
 
-User replaces shipped and project replaces user (and shipped), by id,
-through a `BundleOverride` chain; `Catalog().Overrides()` lists what
-was replaced, and `host.Open` traces
-one `agentdef.shadowed` event per replacement. A missing layer folder
-is skipped; a folder without `bundle.yaml` is
-`bundle.manifest_missing`. Load failures are `*bundle.LoadError`s;
-read `Diagnostics` for every problem and its position. `Sources` adds
-other bundles (libraries, extra definitions) and `Definitions` adds
-Go-built definitions (owner `agentsdk.go`); neither replaces anything,
-so a shared name is a conflict.
+A directory with `bundle.yaml` is one bundle; otherwise subdirectories are groups.
+Missing or empty roots are empty layers. Hidden staging directories are skipped.
+Loose `.star` files outside a bundle are errors. Each logical agent, skill or
+workflow should have its own bundle, with its prompt/schema/support files beside
+it. Bundle IDs are unique across layers; they no longer identify an entire layer.
 
-`Reload` reloads every layer: the catalog is replaced whole or not at
-all, so a bad edit keeps the previous catalogue. The host reloads before
-resolving each run and traces a failed reload as `agentdef.reload_failed`. `AddDefinition` adds or replaces a Go-built
-definition and reloads. `InstallAgent` and `InstallWorkflow` (behind
-`agents.promote`/`workflows.promote`) write `agents/<name>.star` /
-`workflows/<name>.star` and its `bundle.yaml` entry into the user bundle
-with `bundle.Live.Edit` at `<UserDir>/agentsdk.user`, rolled back if the
-reload fails. Edit rewrites `bundle.yaml` with foundation-kit's encoder,
-so comments in it are not kept. Other folders in `UserDir` are not read.
+User replaces shipped and project replaces both, by kind and contribution name.
+The loader validates each layer through `bundle.Load`, derives explicit
+`bundle.Override` entries directly to the winning definition, then validates and
+publishes the combined catalog through `bundle.Live`. Duplicate names within a
+layer fail. `Catalog().Overrides()` reports the exact replaced and winning refs;
+`host.Open` traces these as `agentdef.shadowed` events. `Sources` supplies shared
+libraries or extra definitions outside this hierarchy. A name conflict with these
+or with Go `Definitions` remains an error.
+
+Shared support belongs in a separate bundle declared under `dependencies`.
+Dependencies can be in the same layer or in `Options.Sources` when shared between
+layers. Starlark `load()`, prompt `{"file":"@bundle.id/prompt.md"}` and
+`loop.output="@bundle.id/schema.json"` all read accepted dependency snapshots.
+Paths cannot escape those snapshots; undeclared dependencies are errors.
+
+`Reload` rediscovers directories and replaces the catalog atomically. Failed loads
+keep the previous catalog. The host reloads before new runs and traces failures
+as `agentdef.reload_failed`. Resolved prompts, schemas and skill bodies come from
+one catalog; in-flight runs keep that snapshot. Workflows retain their compiled
+program. `AddDefinition` updates Go definitions through the same live catalog.
+
+`InstallAgent` and `InstallWorkflow` (behind `agents.promote`/`workflows.promote`)
+use `bundle.Live.Edit` to create or update one user bundle each:
+`definitions/agentsdk.user.definitions.<name>/agent.star` or
+`workflows/agentsdk.user.workflows.<name>/workflow.star`. Reinstalling preserves
+that bundle's identity and replaces its contribution. A conflicting separately
+authored user bundle is rejected. Invalid installs roll back. Edit preserves
+support assets and dependencies, but rewrites manifest formatting and comments.
 
 ## Definitions
 

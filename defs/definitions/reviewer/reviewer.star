@@ -1,5 +1,5 @@
 # reviewer: evidence-based review with a structured verdict.
-load("./lib/common.star", "REVIEW_OUTPUT", "fragment")
+load("@agentsdk.shared.common/common.star", "REVIEW_OUTPUT", "fragment")
 
 agent(
     name = "reviewer",

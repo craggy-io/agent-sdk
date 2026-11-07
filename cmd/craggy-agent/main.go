@@ -91,9 +91,9 @@ Live:
   resume [--root res] --db trace.db <workflow-run-id>
       Resumes a journaled workflow run (v 6.3).
   --root (default: a res/ directory here or up to 3 levels above) is the
-  project definition layer: a folder with a bundle.yaml (metadata.id
-  agentsdk.project) listing its agents, skills and workflows. It replaces
-  the built-in definitions by name. A folder without bundle.yaml is an error.
+  project definition layer: a tree of independently identified bundles. Each
+  bundle has a bundle.yaml declaring its agents, skills or workflows. Higher
+  layers replace lower definitions by kind and name; same-layer conflicts fail.
 
 Queries (--db <sqlite trace>):
   runs                         list runs
@@ -1124,7 +1124,7 @@ func liveSession(ctx context.Context, g globals, cfgPath, sessionID string) (*ho
 	}
 	// The built-in catalogue is the shipped layer; --root (or a nearby
 	// res/ directory) is the project layer, which replaces it by name.
-	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(), Project: findRoot(g.root)})
+	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Sources(), Project: findRoot(g.root)})
 	if err != nil {
 		cleanup()
 		return nil, nil, err

@@ -56,7 +56,7 @@ as `§N`, and [AGENTS.md](AGENTS.md) for the integration guide.
 
 ```go
 loader, err := agentdef.Open(ctx, agentdef.Options{
-    Shipped: defs.Source(), // built-in agents, skill and workflows
+    Shipped: defs.Sources(), // built-in agents, skill and workflows
     Project: "res",         // optional: a bundle replacing them by name
 })
 if err != nil { return err }
@@ -85,11 +85,11 @@ contributions:
   - {id: plan-review, kind: agentsdk.workflow@1, path: workflows/plan-review.star}
 ```
 
-Layers are one bundle each: shipped (`defs`), user (`<UserDir>/agentsdk.user`,
-where approved `promote` installs) and project. A higher layer replaces a
-lower one by name; any other shared name is an error. A missing folder is
-skipped, a folder without `bundle.yaml` is an error. See
-[docs/agentdef.md](docs/agentdef.md).
+Layers contain independently identified bundles: shipped (`defs.Sources()`),
+user (`UserDir`, where approved promotion installs individual bundles) and project.
+Higher layers replace lower contributions by kind and name; same-layer conflicts
+fail. Directory groups are discovered recursively, and all content is loaded by
+foundation-kit's bundle pipeline. See [docs/agentdef.md](docs/agentdef.md).
 
 An agent definition is a Starlark file declaring one agent:
 

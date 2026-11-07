@@ -9,7 +9,7 @@
 // skill (SkillKind, SKILL.md) and workflow (WorkflowKind) as a
 // contribution whose id is its name. A folder without a bundle.yaml is
 // not loaded. Open holds them in a bundle.Live as layers, shipped then
-// user then project, each one bundle, where a higher layer replaces a
+// user then project, with multiple bundles per layer. A higher layer replaces a
 // lower one by name. Agent and workflow files compile through
 // script-services' starcompile, so load() reaches the file's bundle and
 // its declared dependencies only.
@@ -111,10 +111,13 @@ type Resolved struct {
 	Description string           `json:"description,omitempty"`
 	Profile     string           `json:"profile,omitempty"`
 	Tools       model.FilterSpec `json:"tools,omitempty"`
-	Skills      []string         `json:"skills,omitempty"`
-	Delegates   []string         `json:"delegates,omitempty"`
-	Workflows   bool             `json:"workflows,omitempty"`
-	Loop        LoopSpec         `json:"loop,omitempty"`
+	// SkillBodies is captured from the same catalog as the prompt and inheritance.
+	// It is runtime input, not part of the public definition projection.
+	SkillBodies map[string]string `json:"-"`
+	Skills      []string          `json:"skills,omitempty"`
+	Delegates   []string          `json:"delegates,omitempty"`
+	Workflows   bool              `json:"workflows,omitempty"`
+	Loop        LoopSpec          `json:"loop,omitempty"`
 
 	// SystemPrompt is the single rendered system message: fragments
 	// joined with a blank line, skills catalogue last.

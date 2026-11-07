@@ -1,0 +1,2 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.shared.common, version: 1.0.0}

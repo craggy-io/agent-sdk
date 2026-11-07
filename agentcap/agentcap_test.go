@@ -26,7 +26,7 @@ import (
 // the user layer ("" for none), and registers the agent capabilities.
 func openStack(t *testing.T, opts agentcap.Options, userDir string) (*registry.Registry, *host.Host) {
 	t.Helper()
-	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source(), UserDir: userDir})
+	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Sources(), UserDir: userDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,16 +117,16 @@ func TestDefinePromoteRoundTrip(t *testing.T) {
 	src := `agent(name = "quick", extends = "base", profile = "fast", prompt = [{"q": "Be quick."}])`
 	invoke(t, r, "agents.define", map[string]any{"source": src})
 	out := invoke(t, r, "agents.promote", map[string]any{"name": "quick"})
-	if !approved || !strings.Contains(string(out), "quick.star") {
+	if !approved || !strings.Contains(string(out), "agent.star") {
 		t.Fatalf("promote=%s approved=%v", out, approved)
 	}
-	user := filepath.Join(root, agentdef.UserID)
-	written, err := os.ReadFile(filepath.Join(user, "agents", "quick.star"))
+	user := filepath.Join(root, "definitions", "agentsdk.user.definitions.quick")
+	written, err := os.ReadFile(filepath.Join(user, "agent.star"))
 	if err != nil || string(written) != src {
 		t.Fatalf("written=%q err=%v", written, err)
 	}
 	manifest, err := os.ReadFile(filepath.Join(user, "bundle.yaml"))
-	if err != nil || !strings.Contains(string(manifest), "path: agents/quick.star") {
+	if err != nil || !strings.Contains(string(manifest), "path: agent.star") {
 		t.Fatalf("manifest=%s err=%v", manifest, err)
 	}
 	// The running host catalogues it at once.
@@ -135,7 +135,7 @@ func TestDefinePromoteRoundTrip(t *testing.T) {
 		t.Fatalf("agents.list after promote=%s", out)
 	}
 	// The promoted bundle loads standing alone with the built-ins.
-	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source(), UserDir: root})
+	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Sources(), UserDir: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestPromoteRefusedWithoutApprove(t *testing.T) {
 	if _, err := r.View(registry.All).Invoke(context.Background(), "agents.promote", raw); err == nil {
 		t.Fatal("promote without Approve succeeded")
 	}
-	if _, err := os.Stat(filepath.Join(root, agentdef.UserID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "definitions", "agentsdk.user.definitions.quick")); !os.IsNotExist(err) {
 		t.Fatalf("file written despite refusal: %v", err)
 	}
 }
@@ -172,7 +172,7 @@ func TestPromoteWorkflow(t *testing.T) {
 	src := "WORKFLOW = workflow(description = \"Say hi.\")\n\ndef run(input):\n    return {\"hi\": True}\n"
 	out := invoke(t, r, "workflows.promote", map[string]any{"name": "hi", "source": src})
 	var promoted struct{ Path string }
-	if err := json.Unmarshal(out, &promoted); err != nil || !strings.HasSuffix(promoted.Path, filepath.Join(agentdef.UserID, "workflows", "hi.star")) {
+	if err := json.Unmarshal(out, &promoted); err != nil || !strings.HasSuffix(promoted.Path, filepath.Join("workflows", "agentsdk.user.workflows.hi", "workflow.star")) {
 		t.Fatalf("promote=%s", out)
 	}
 	out = invoke(t, r, "workflows.list", map[string]any{})
@@ -184,7 +184,7 @@ func TestPromoteWorkflow(t *testing.T) {
 	if _, err := r.View(registry.All).Invoke(context.Background(), "workflows.promote", raw); err == nil || !strings.Contains(err.Error(), "undefined_name") {
 		t.Fatalf("bad promote err=%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, agentdef.UserID, "workflows", "bad.star")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "workflows", "agentsdk.user.workflows.bad", "workflow.star")); !os.IsNotExist(err) {
 		t.Fatalf("bad workflow left behind: %v", err)
 	}
 }

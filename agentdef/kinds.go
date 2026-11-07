@@ -2,8 +2,10 @@ package agentdef
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"path"
+	"strings"
 	"testing/fstest"
 
 	"github.com/craggy-io/foundation-kit/bundle"
@@ -73,7 +75,7 @@ func WorkflowBuiltins() []string { return append([]string(nil), workflowBuiltins
 // compiler (starcompile): load() is served by the file's own bundle and,
 // as @<dependency-id>/path, by the dependencies its bundle.yaml declares.
 // Prompt {"file": ...} fragments and loop.output schema files are read
-// from the agent file's bundle, relative to the file. Compiling has no
+// from the agent file's bundle or a declared @bundle.id/path dependency. Compiling has no
 // side effects, so bundle.Live reuses compiled definitions across
 // reloads.
 func Compilers() []bundle.AnyCompiler {
@@ -115,10 +117,10 @@ func compileAgent(ctx context.Context, u *starcompile.Unit) (bundle.Compiled[*De
 // buildAgent runs an agent file's top level with a fresh collector and
 // returns the one agent it declares.
 func buildAgent(ctx context.Context, u *starcompile.Unit) (*Definition, []bundle.Diagnostic) {
-	files := u.Contribution().Files
+	contribution := u.Contribution()
 	col := &collector{
 		file: u.Path(), dir: path.Dir(u.Path()),
-		read: func(name string) ([]byte, error) { return fs.ReadFile(files, name) },
+		read: func(name string) ([]byte, error) { return readSupport(contribution, name) },
 	}
 	if _, err := u.Exec(ctx, starcompile.ExecOptions{Predeclared: col.predeclared()}); err != nil {
 		return nil, u.Diagnostics(err)
@@ -178,4 +180,20 @@ func ParseSource(ctx context.Context, src []byte) (*Definition, error) {
 		return nil, &bundle.LoadError{Diagnostics: diags}
 	}
 	return d, nil
+}
+
+// readSupport reads only the accepted bundle snapshot or a declared dependency.
+func readSupport(c bundle.Contribution, name string) ([]byte, error) {
+	if !strings.HasPrefix(name, "@") {
+		return fs.ReadFile(c.Files, name)
+	}
+	owner, file, ok := strings.Cut(strings.TrimPrefix(name, "@"), "/")
+	if !ok || !fs.ValidPath(file) {
+		return nil, fmt.Errorf("invalid dependency support path %q", name)
+	}
+	files, _, ok := c.Dependency(owner)
+	if !ok {
+		return nil, fmt.Errorf("undeclared support dependency %q", owner)
+	}
+	return fs.ReadFile(files, file)
 }

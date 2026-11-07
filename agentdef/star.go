@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -465,5 +466,8 @@ func durationPtr(field string, v starlark.Value) (*time.Duration, error) {
 // that leaves the bundle fails to read: bundle files are only served under
 // their own root.
 func joinPath(dir, name string) string {
+	if strings.HasPrefix(name, "@") {
+		return name
+	}
 	return path.Join(dir, name)
 }

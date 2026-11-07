@@ -19,10 +19,10 @@ Runtime registration: `agents.define` takes Starlark `source`
 definition) or a JSON `definition`; `workflows.define` takes a name
 and source. Both are session-scoped. `promote` installs the agent or
 workflow in the user layer of the host's loader
-(`agentdef.Options.UserDir`): the file, `agents/<name>.star` or
-`workflows/<name>.star`, and its entry in the user bundle's
-`bundle.yaml`, written under `<UserDir>/agentsdk.user` with
-`bundle.Live.Edit` (`Loader.InstallAgent`/`InstallWorkflow`). It runs only when
+(`agentdef.Options.UserDir`): one bundle per promoted agent or workflow, under
+`definitions/agentsdk.user.definitions.<name>/` or
+`workflows/agentsdk.user.workflows.<name>/`, written with `bundle.Live.Edit`
+(`Loader.InstallAgent`/`InstallWorkflow`). It runs only when
 `Options.Approve` accepts the exact bytes (validated first: agents
 must parse and resolve), and the install is rolled back if the
 catalogue then fails to load. Without a user layer, promote is

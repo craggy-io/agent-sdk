@@ -1,0 +1,4 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.shipped.workflow.agent-turn, version: 1.0.0}
+contributions:
+  - {id: agent-turn, kind: agentsdk.workflow@1, path: agent-turn.star}

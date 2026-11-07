@@ -39,7 +39,7 @@ agent(
 )
 `)},
 	}
-	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: bundle.Embedded("shipped", shipped)})
+	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("shipped", shipped)}})
 	if err != nil {
 		panic(err)
 	}

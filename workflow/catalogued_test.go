@@ -38,7 +38,7 @@ def run(input):
     return {"text": r.text}
 `)},
 	}
-	defs, err := agentdef.Open(ctx, agentdef.Options{Shipped: bundle.Embedded("shipped", shipped), Project: testRoot(t)})
+	defs, err := agentdef.Open(ctx, agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("shipped", shipped)}, Project: testRoot(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,10 +64,10 @@ def run(input):
 // A workflow file that uses a name workflows do not have fails when the
 // bundle loads, not when it runs.
 func TestCataloguedWorkflowChecked(t *testing.T) {
-	_, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: bundle.Embedded("shipped", fstest.MapFS{
+	_, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("shipped", fstest.MapFS{
 		"bundle.yaml": {Data: []byte("apiVersion: craggy.io/bundle/v1\nmetadata: {id: agentsdk.shipped, version: 1.0.0}\ncontributions:\n  - {id: bad, kind: agentsdk.workflow@1, path: bad.star}\n")},
 		"bad.star":    {Data: []byte("WORKFLOW = workflow(description = \"x\")\n\ndef run(input):\n    return nope()\n")},
-	})})
+	})}})
 	var le *bundle.LoadError
 	if !errors.As(err, &le) || le.Diagnostics[0].Path != "bad.star" || le.Diagnostics[0].Line != 4 || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("err=%v", err)

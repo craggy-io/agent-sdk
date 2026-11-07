@@ -602,7 +602,7 @@ func (p *resProvider) Model(ctx context.Context, id string) (model.ModelInfo, er
 }
 
 func TestShippedResWorkflows(t *testing.T) {
-	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source()})
+	loader, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Sources()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,5 +1,5 @@
 # base: the general-purpose foundation the shipped agents extend.
-load("./lib/common.star", "fragment")
+load("@agentsdk.shared.common/common.star", "fragment")
 
 agent(
     name = "base",

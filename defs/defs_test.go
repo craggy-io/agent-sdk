@@ -11,7 +11,7 @@ import (
 
 // The shipped catalogue loads and every built-in agent resolves.
 func TestBuiltinCatalogueResolves(t *testing.T) {
-	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Source()})
+	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: defs.Sources()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestBuiltinCatalogueResolves(t *testing.T) {
 		!strings.Contains(rev.SystemPrompt, "example-review") || strings.Contains(rev.SystemPrompt, "When investigating") {
 		t.Errorf("reviewer resolved=%+v", rev)
 	}
-	if def, ok := l.Get("reviewer"); !ok || def.Source != "agents/reviewer.star" {
+	if def, ok := l.Get("reviewer"); !ok || def.Source != "reviewer.star" {
 		t.Errorf("reviewer source=%+v", def)
 	}
 	wfs := l.Workflows()

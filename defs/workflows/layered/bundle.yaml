@@ -1,0 +1,4 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.shipped.workflow.layered, version: 1.0.0}
+contributions:
+  - {id: layered, kind: agentsdk.workflow@1, path: layered.star}

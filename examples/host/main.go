@@ -156,7 +156,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if key := os.Getenv("OPENROUTER_API_KEY"); key != "" {
 		prov = openrouter.New(key)
 	}
-	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(), UserDir: *defsDir})
+	loader, err := agentdef.Open(ctx, agentdef.Options{Shipped: defs.Sources(), UserDir: *defsDir})
 	if err != nil {
 		return err
 	}

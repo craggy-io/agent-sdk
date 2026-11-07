@@ -1,0 +1,4 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.shipped.skill.example-review, version: 1.0.0}
+contributions:
+  - {id: example-review, kind: agentsdk.skill@1, path: SKILL.md}

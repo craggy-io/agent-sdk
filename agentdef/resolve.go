@@ -155,7 +155,8 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any)
 	leaf := chain[len(chain)-1]
 	r := &Resolved{
 		Name: leaf.Name, Extends: leaf.Extends,
-		Provenance: map[string]string{},
+		Provenance:  map[string]string{},
+		SkillBodies: map[string]string{},
 	}
 	for _, d := range chain {
 		r.Chain = append(r.Chain, d.Name)
@@ -284,6 +285,7 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("agentdef: %s: unknown skill %q", r.Name, name)
 			}
+			r.SkillBodies[name] = sk.Body
 			fmt.Fprintf(&list, "- `%s`: %s\n", sk.Name, sk.Description)
 		}
 		if r.SystemPrompt != "" {

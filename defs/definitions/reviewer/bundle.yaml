@@ -1,0 +1,6 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: agentsdk.shipped.agent.reviewer, version: 1.0.0}
+dependencies:
+  - {id: agentsdk.shared.common}
+contributions:
+  - {id: reviewer, kind: agentsdk.agent@1, path: reviewer.star}

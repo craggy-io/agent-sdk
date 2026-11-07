@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"sync"
@@ -17,41 +14,23 @@ import (
 	"github.com/craggy-io/foundation-kit/kind"
 )
 
-// The owner IDs of the definition layers and of Go-built definitions. A
-// layer's bundle.yaml must use its layer's metadata.id.
-const (
-	ShippedID = "agentsdk.shipped" // Options.Shipped, such as defs.Source()
-	UserID    = "agentsdk.user"    // the bundle at <Options.UserDir>/agentsdk.user
-	ProjectID = "agentsdk.project" // the bundle at Options.Project
-	GoID      = "agentsdk.go"      // Options.Definitions and AddDefinition
-)
+// GoID owns definitions supplied by Go rather than bundles.
+const GoID = "agentsdk.go"
 
-// Options choose the bundles a Loader catalogues. Every layer is one
-// bundle, a folder with a bundle.yaml whose metadata.id is the layer's ID.
-// Layers replace each other by contribution id, explicitly, through a
-// bundle override chain: user replaces shipped, project replaces user (and
-// shipped, when there is no user layer). Catalog.Overrides reports what
-// was replaced.
+// Options selects definition layers. Each layer may contain many bundles;
+// higher layers replace lower definitions of the same kind and name.
+// Duplicate names within a layer or in Sources remain errors.
 type Options struct {
-	// Shipped is the bottom layer, usually defs.Source(). Its
-	// metadata.id must be ShippedID. nil: none.
-	Shipped bundle.Source
-	// UserDir holds the user layer: the bundle at
-	// <UserDir>/agentsdk.user (metadata.id UserID). It is where
-	// InstallAgent and InstallWorkflow write (agents.promote and
-	// workflows.promote), through bundle.Live.Edit; other folders in
-	// UserDir are not read. A missing agentsdk.user folder is no user layer yet. "": none.
+	// Shipped is the bottom layer, for example defs.Sources().
+	Shipped []bundle.Source
+	// UserDir is a tree of user bundles, rediscovered on reload. Runtime
+	// installs create one bundle per definition beneath definitions/ or workflows/.
 	UserDir string
-	// Project is the top layer: a bundle directory whose metadata.id is
-	// ProjectID. A missing directory is skipped. "": none.
+	// Project is a tree of project bundles, the highest layer.
 	Project string
-	// Sources are other bundles: libraries that layers declare as
-	// dependencies and load() as @<id>/path, or extra definitions. They
-	// replace nothing, so a name one of them shares with a layer is a
-	// bundle.id_conflict error.
-	Sources []bundle.Source
-	// Definitions are built in Go, owned by GoID. They replace nothing
-	// either. See AddDefinition.
+	// Sources are shared libraries and extra definitions outside the override
+	// hierarchy. Each layer may declare dependencies on these bundles.
+	Sources     []bundle.Source
 	Definitions []*Definition
 }
 
@@ -75,6 +54,7 @@ type Loader struct {
 func Open(ctx context.Context, opts Options) (*Loader, error) {
 	l := &Loader{opts: opts, compilers: Compilers()}
 	l.opts.Sources = slices.Clone(opts.Sources)
+	l.opts.Shipped = slices.Clone(opts.Shipped)
 	for _, d := range opts.Definitions {
 		if err := validGoDefinition(d); err != nil {
 			return nil, err
@@ -91,23 +71,10 @@ func Open(ctx context.Context, opts Options) (*Loader, error) {
 
 // options is the bundle.Live options function: it looks for the layer
 // folders again on every load.
-func (l *Loader) options(context.Context) (bundle.Options, error) {
-	o := bundle.Options{Compilers: l.compilers, Sources: slices.Clone(l.opts.Sources)}
-	var layers []string
-	if l.opts.Shipped != nil {
-		o.Sources = append(o.Sources, l.opts.Shipped)
-		layers = append(layers, ShippedID)
-	}
-	// A missing layer folder is no layer; any other folder is loaded, so
-	// one without a bundle.yaml is bundle.manifest_missing.
-	for _, layer := range []struct{ id, dir string }{{UserID, l.userBundle()}, {ProjectID, l.opts.Project}} {
-		if _, err := os.Stat(layer.dir); layer.dir != "" && !errors.Is(err, fs.ErrNotExist) {
-			o.Sources = append(o.Sources, bundle.Dir(layer.dir))
-			layers = append(layers, layer.id)
-		}
-	}
-	for i := 1; i < len(layers); i++ {
-		o.BundleOverrides = append(o.BundleOverrides, bundle.BundleOverride{Target: layers[i-1], Replacement: layers[i]})
+func (l *Loader) options(ctx context.Context) (bundle.Options, error) {
+	o, err := l.layerOptions(ctx)
+	if err != nil {
+		return bundle.Options{}, err
 	}
 	l.mu.Lock()
 	defs := slices.Clone(l.defs)
@@ -150,13 +117,6 @@ func (l *Loader) Reload(ctx context.Context) (bool, error) { return l.live.Reloa
 // UserDir returns Options.UserDir, where InstallAgent and InstallWorkflow
 // write; "" when there is no user layer.
 func (l *Loader) UserDir() string { return l.opts.UserDir }
-
-func (l *Loader) userBundle() string {
-	if l.opts.UserDir == "" {
-		return ""
-	}
-	return filepath.Join(l.opts.UserDir, UserID)
-}
 
 // AddDefinition adds or replaces a Go-built definition (owned by GoID)
 // and reloads. It replaces nothing from a bundle: a name a bundle also

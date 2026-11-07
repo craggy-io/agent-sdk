@@ -1,20 +1,32 @@
-// Package defs embeds the agent, skill and workflow definitions shipped
-// with the SDK: one bundle, whose bundle.yaml (metadata.id
-// agentdef.ShippedID) lists every agent, skill and workflow. Hosts use it
-// as the shipped layer, agentdef.Options.Shipped; user and project layers
-// replace its definitions by name.
+// Package defs supplies the SDK's default logical definition bundles.
+// Hosts pass Sources to agentdef.Options.Shipped; user and project bundles
+// replace definitions by kind and name.
 package defs
 
 import (
 	"embed"
-
 	"github.com/craggy-io/foundation-kit/bundle"
-
-	"github.com/craggy-io/agent-sdk/agentdef"
+	"io/fs"
+	"path"
 )
 
-//go:embed bundle.yaml agents skills workflows
+//go:embed definitions skills workflows shared
 var embedded embed.FS
 
-// Source is the shipped bundle, for agentdef.Options.Shipped.
-func Source() bundle.Source { return bundle.Embedded(agentdef.ShippedID, embedded) }
+// Sources returns one source per authored bundle, including shared helpers.
+func Sources() []bundle.Source {
+	manifests, err := fs.Glob(embedded, "*/*/bundle.yaml")
+	if err != nil {
+		panic(err)
+	}
+	sources := make([]bundle.Source, 0, len(manifests))
+	for _, manifest := range manifests {
+		dir := path.Dir(manifest)
+		files, err := fs.Sub(embedded, dir)
+		if err != nil {
+			panic(err)
+		}
+		sources = append(sources, bundle.Embedded("agent-sdk/defs/"+dir, files))
+	}
+	return sources
+}

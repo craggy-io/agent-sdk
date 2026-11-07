@@ -54,7 +54,7 @@ capability-services (`arch_test.go` enforces the list).
 2. Trace sink: `memory.New()` for tests, the SQLite sink in
    `adapters/tracesqlite` for durable runs. One writer owns a sink; close it
    after the host.
-3. Definitions: `agentdef.Open(ctx, agentdef.Options{Shipped: defs.Source(),
+3. Definitions: `agentdef.Open(ctx, agentdef.Options{Shipped: defs.Sources(),
    UserDir: ..., Project: ...})`; leave out the other layers for the
    embedded set alone. Definitions name profiles, never models. See "Definition bundles".
 4. Host: `host.Open(ctx, host.Options{...})`; close in reverse order
@@ -75,16 +75,14 @@ capability-services (`arch_test.go` enforces the list).
   contribution id. Share helpers through `load()` of undeclared support
   files in the same bundle, or `@<dependency-id>/path` from a declared
   dependency.
-- Layers are one bundle each, with a fixed `metadata.id`: shipped
-  `agentsdk.shipped` (`defs`), user `agentsdk.user` at
-  `<UserDir>/agentsdk.user`, project `agentsdk.project` at `Project`.
-  Replacement is only through the layer chain; anything else sharing a
-  name is a `bundle.id_conflict`. A missing layer folder is skipped; one
-  without `bundle.yaml` is an error.
-- Runtime changes go through the `bundle.Live`: `Reload`,
-  `AddDefinition` (Go-built definitions, a `kind.Provider`) and
-  `InstallAgent`/`InstallWorkflow` (promote adds the file and its
-  `bundle.yaml` entry to the user bundle through `Live.Edit`).
+- Layers contain multiple bundles with independent IDs. `Shipped` is a source
+  list; `UserDir` and `Project` are recursively discovered bundle trees. Higher
+  layers override lower contributions by kind and name using explicit bundle
+  overrides. Same-layer conflicts fail. Shared support belongs in declared
+  dependency bundles; cross-layer libraries go in `Options.Sources`.
+- Runtime changes use `bundle.Live`: `Reload`, `AddDefinition` (Go definitions)
+  and `InstallAgent`/`InstallWorkflow` (one user bundle per promoted definition,
+  updated through `Live.Edit`). Resolved runs pin prompt, schema and skill bytes.
 
 ## Semantics that must not drift
 

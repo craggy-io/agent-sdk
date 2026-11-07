@@ -81,7 +81,7 @@ agent(
 
 func open(t *testing.T, files fstest.MapFS) *agentdef.Loader {
 	t.Helper()
-	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: bundle.Embedded("test", files)})
+	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("test", files)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func open(t *testing.T, files fstest.MapFS) *agentdef.Loader {
 // openErr opens files as the shipped layer and returns the load error.
 func openErr(t *testing.T, files fstest.MapFS) error {
 	t.Helper()
-	_, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: bundle.Embedded("test", files)})
+	_, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("test", files)}})
 	if err == nil {
 		t.Fatal("Open succeeded")
 	}
@@ -253,7 +253,7 @@ func writeBundle(t *testing.T, dir string, files map[string]string) {
 func TestLayers(t *testing.T) {
 	ctx := context.Background()
 	userDir, project := t.TempDir(), t.TempDir()
-	writeBundle(t, filepath.Join(userDir, agentdef.UserID), map[string]string{
+	writeBundle(t, filepath.Join(userDir, "agentsdk.user"), map[string]string{
 		"bundle.yaml": `apiVersion: craggy.io/bundle/v1
 metadata: {id: agentsdk.user, version: 1.0.0}
 contributions:
@@ -272,7 +272,7 @@ contributions:
 		"assistant.star": `agent(name = "assistant", extends = "base", profile = "project")`,
 	})
 	l, err := agentdef.Open(ctx, agentdef.Options{
-		Shipped: bundle.Embedded("test", testFS()), UserDir: userDir, Project: project,
+		Shipped: []bundle.Source{bundle.Embedded("test", testFS())}, UserDir: userDir, Project: project,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +313,7 @@ func TestLayerFolders(t *testing.T) {
 func TestInstallAgent(t *testing.T) {
 	ctx := context.Background()
 	userDir := t.TempDir()
-	l, err := agentdef.Open(ctx, agentdef.Options{Shipped: bundle.Embedded("test", testFS()), UserDir: userDir})
+	l, err := agentdef.Open(ctx, agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("test", testFS())}, UserDir: userDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +321,7 @@ func TestInstallAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(userDir, agentdef.UserID, "agents", "quick.star"); p != want {
+	if want := filepath.Join(userDir, "definitions", "agentsdk.user.definitions.quick", "agent.star"); p != want {
 		t.Errorf("path=%s, want %s", p, want)
 	}
 	if r, err := l.Resolve("quick", nil); err != nil || r.Profile != "fast" {
@@ -340,8 +340,8 @@ func TestInstallAgent(t *testing.T) {
 	if r, _ := l.Resolve("quick", nil); r == nil || r.Profile != "faster" {
 		t.Errorf("quick not replaced: %+v", r)
 	}
-	manifest, err := os.ReadFile(filepath.Join(userDir, agentdef.UserID, "bundle.yaml"))
-	if err != nil || strings.Count(string(manifest), "id: quick") != 1 || !strings.Contains(string(manifest), "id: reviewer") {
+	manifest, err := os.ReadFile(filepath.Join(userDir, "definitions", "agentsdk.user.definitions.quick", "bundle.yaml"))
+	if err != nil || strings.Count(string(manifest), "id: quick") != 1 || strings.Contains(string(manifest), "id: reviewer") {
 		t.Fatalf("manifest=%s err=%v", manifest, err)
 	}
 	// A wrong name fails the install's load and changes nothing.
@@ -353,11 +353,11 @@ func TestInstallAgent(t *testing.T) {
 	if _, ok := l.Get("broken"); ok {
 		t.Error("broken agent catalogued")
 	}
-	if _, err := os.Stat(filepath.Join(userDir, agentdef.UserID, "agents", "broken.star")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(userDir, "definitions", "agentsdk.user.definitions.broken", "agent.star")); !os.IsNotExist(err) {
 		t.Errorf("broken file left behind: %v", err)
 	}
 	// A fresh loader over the same folders sees the installs.
-	l2, err := agentdef.Open(ctx, agentdef.Options{Shipped: bundle.Embedded("test", testFS()), UserDir: userDir})
+	l2, err := agentdef.Open(ctx, agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("test", testFS())}, UserDir: userDir})
 	if err != nil {
 		t.Fatal(err)
 	}
