@@ -1,5 +1,7 @@
 github.com/craggy-io/agent-sdk v0.1.0 h1:po9QjUVVXghFeCnnh1aAIw1yHQ32oUM2SAYI0B94/e8=
 github.com/craggy-io/agent-sdk v0.1.0/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107122541-891414d86e44 h1:GlYsV9uOpJEKB/9hAyi80/SDLYDoT4vxzkPTZ1NSP/E=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107122541-891414d86e44/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
 github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc h1:8//J24BcVMqvdl7wtE8E+Z/Z6P3K/PJFWBOnXQnEVJ8=
 github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc/go.mod h1:3LzurR78LiTu3uSB6g+QvVpc/wOraZgXa7sttq688wQ=
 github.com/craggy-io/foundation-kit/adapters/sqlite v0.0.0-20261105234626-e7c70ea2ccbc h1:XgfezujlWXW4IG7FNP15JdJENs5O1rG8vmuMMEM3rWo=
