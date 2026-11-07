@@ -10,10 +10,11 @@
 //	go run . -mcp                         # MCP tools on stdio
 //	go run . -defs ./mydefs -scripts ./caps -trace trace.db -memory ./mem
 //
-// -defs holds the user definition layer, the bundle ./mydefs/agentsdk.user
-// (created by the first approved promote), and -scripts is a bundle of
-// capability scripts. Both folders need a bundle.yaml; see the agentdef
-// and starlarkcap docs.
+// -defs is the user definition layer: a tree of bundles, each with its
+// own bundle.yaml, replacing built-ins by name. An approved promote
+// writes its own bundle there (definitions/agentsdk.user.definitions.<name>/
+// or workflows/agentsdk.user.workflows.<name>/). -scripts is a bundle of
+// capability scripts. See the agentdef and starlarkcap docs.
 //
 // Views are the security story: agents and MCP clients get the agent
 // view (no admin- or host-tagged capabilities, so no promote and no
@@ -87,7 +88,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	addr := flags.String("addr", ":8080", "HTTP listen address")
 	useMCP := flags.Bool("mcp", false, "serve MCP over stdio instead of HTTP")
-	defsDir := flags.String("defs", "", "user definition folder: the bundle at <defs>/agentsdk.user replaces built-ins by name, and promote installs there")
+	defsDir := flags.String("defs", "", "user definition layer: a tree of bundles replacing built-ins by name; approved promotes install their own bundles here")
 	scripts := flags.String("scripts", "", "capability script bundle (a folder whose bundle.yaml lists capability.script@1 files) to load and hot-reload")
 	tracePath := flags.String("trace", "", "SQLite trace file (default: in-memory, no resume across restarts)")
 	memDir := flags.String("memory", "", "durable memory directory (default: in-memory)")

@@ -1,9 +1,8 @@
 # Verification
 
-There is no CI workflow yet: two dependencies are still private
-modules, so hosted runners cannot fetch them (the sibling services
-with private deps are in the same state). The gate below is run
-locally; add CI once the dependencies are public.
+There is no CI workflow yet; the gate below is run locally. All Craggy
+dependencies are public modules, so a hosted runner can run the same
+gate.
 
 The gate is `gofmt` clean, `go vet`, `go build`,
 `go test` and `go test -race` over the core module, plus `go test`

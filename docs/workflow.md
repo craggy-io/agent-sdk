@@ -5,6 +5,9 @@ Durable Starlark workflows (design §6), executed with script-services
 never unbounded). Importing the package registers it as the host's
 workflow runner, so `host.RunWorkflow` and the loop's opt-in
 `workflow` tool reach it.
+`Register()` reinstalls that hook for hosts that replaced it.
+`RunEx(ctx, host, name, input, opts)` is `Run` with `Options` and also
+returns the workflow run ID to pass to `Resume` later.
 
 A catalogued workflow is an `agentsdk.workflow@1` contribution of a
 definition bundle (see [agentdef](agentdef.md)): its bundle.yaml lists

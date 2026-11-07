@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1296" viewBox="0 0 1440 1296" role="img" aria-labelledby="title desc">
+<title id="title">Agent SDK package layers</title>
+<desc id="desc">Six layers. Tools (craggy-agent CLI, examples/host, SQLite and YAML adapters) sit on agentcap, the capability bridge, which uses workflow, which uses host, the runtime. host uses the engine (loop, agentdef, openrouter), which uses foundations (model, transcript, config, trace, memory, defs). External: foundation-kit, script-services, capability-services.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#FFB547" stroke-width="1.5"/></marker></defs>
+<rect width="1440" height="1296" rx="20" fill="#111A20"/>
+<g font-family="'JetBrains Mono', Consolas, 'Liberation Mono', monospace">
+<text x="40" y="53" font-size="28" fill="#FFB547" font-weight="700" text-anchor="start">&gt; AGENT SDK</text>
+<text x="40" y="87" font-size="22" fill="#E4ECE7" font-weight="400" text-anchor="start">Starlark-defined agents on one Go ReAct loop</text>
+<text x="1400" y="53" font-size="18" fill="#E4ECE7" font-weight="400" text-anchor="end">PACKAGE LAYERS</text>
+<path d="M40 111 H1400" stroke="#2A2F2C" stroke-width="2"/>
+<text x="40" y="180" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">01 / TOOLS</text>
+<text x="40" y="210" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Separate modules</text>
+<rect x="340" y="140" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 160 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="196" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">craggy-agent</text>
+<text x="362" y="228" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">Trace debug CLI</text>
+<rect x="701" y="140" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M723 160 H757" stroke="#FFB547" stroke-width="3"/>
+<text x="723" y="196" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">examples/host</text>
+<text x="723" y="228" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">MCP / HTTP host</text>
+<rect x="1061" y="140" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M1083 160 H1117" stroke="#FFB547" stroke-width="3"/>
+<text x="1083" y="196" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">adapters</text>
+<text x="1083" y="228" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">tracesqlite / configyaml</text>
+<path d="M870 258 V300" stroke="#FFB547" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="884" y="286" font-size="16" fill="#FFB547" font-weight="400" text-anchor="start">imports</text>
+<text x="40" y="348" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">02 / BRIDGE</text>
+<text x="40" y="378" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Capabilities</text>
+<rect x="340" y="308" width="1060" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 328 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="364" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">agentcap</text>
+<text x="362" y="396" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">agents / workflows / llm / memory as capabilities</text>
+<path d="M870 426 V468" stroke="#FFB547" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="884" y="454" font-size="16" fill="#FFB547" font-weight="400" text-anchor="start">imports</text>
+<text x="40" y="516" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">03 / ORCHESTRATION</text>
+<text x="40" y="546" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Durable scripts</text>
+<rect x="340" y="476" width="1060" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 496 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="532" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">workflow</text>
+<text x="362" y="564" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">Journal / ask gates / resume</text>
+<path d="M870 594 V636" stroke="#FFB547" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="884" y="622" font-size="16" fill="#FFB547" font-weight="400" text-anchor="start">imports</text>
+<text x="40" y="684" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">04 / RUNTIME</text>
+<text x="40" y="714" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Threads and runs</text>
+<rect x="340" y="644" width="1060" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 664 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="700" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">host</text>
+<text x="362" y="732" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">Run tree / mailbox / peers / events / budgets</text>
+<path d="M870 762 V804" stroke="#FFB547" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="884" y="790" font-size="16" fill="#FFB547" font-weight="400" text-anchor="start">imports</text>
+<text x="40" y="852" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">05 / ENGINE</text>
+<text x="40" y="882" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Loop and definitions</text>
+<rect x="340" y="812" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 832 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="868" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">loop</text>
+<text x="362" y="900" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">ReAct / compaction</text>
+<rect x="701" y="812" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M723 832 H757" stroke="#FFB547" stroke-width="3"/>
+<text x="723" y="868" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">agentdef</text>
+<text x="723" y="900" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">Starlark agents / layers</text>
+<rect x="1061" y="812" width="339" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M1083 832 H1117" stroke="#FFB547" stroke-width="3"/>
+<text x="1083" y="868" font-size="26" fill="#E4ECE7" font-weight="700" text-anchor="start">openrouter</text>
+<text x="1083" y="900" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">model.Provider</text>
+<path d="M870 930 V972" stroke="#FFB547" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="884" y="958" font-size="16" fill="#FFB547" font-weight="400" text-anchor="start">imports</text>
+<text x="40" y="1020" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">06 / FOUNDATIONS</text>
+<text x="40" y="1050" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Leaf packages</text>
+<rect x="340" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M362 1000 H396" stroke="#FFB547" stroke-width="3"/>
+<text x="362" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">model</text>
+<text x="362" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">Provider seam</text>
+<rect x="520" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M542 1000 H576" stroke="#FFB547" stroke-width="3"/>
+<text x="542" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">transcript</text>
+<text x="542" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">History</text>
+<rect x="701" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M723 1000 H757" stroke="#FFB547" stroke-width="3"/>
+<text x="723" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">config</text>
+<text x="723" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">Profiles</text>
+<rect x="881" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M903 1000 H937" stroke="#FFB547" stroke-width="3"/>
+<text x="903" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">trace</text>
+<text x="903" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">Event sink</text>
+<rect x="1061" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M1083 1000 H1117" stroke="#FFB547" stroke-width="3"/>
+<text x="1083" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">memory</text>
+<text x="1083" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">Store</text>
+<rect x="1242" y="980" width="158" height="112" rx="12" fill="#16222A" stroke="#4A3F2C" stroke-width="1.5"/>
+<path d="M1264 1000 H1298" stroke="#FFB547" stroke-width="3"/>
+<text x="1264" y="1036" font-size="22" fill="#E4ECE7" font-weight="700" text-anchor="start">defs</text>
+<text x="1264" y="1068" font-size="15" fill="#9DAAA3" font-weight="400" text-anchor="start">Shipped</text>
+<path d="M340 1108 H1400" stroke="#2A2F2C" stroke-width="2" stroke-dasharray="4 6"/>
+<text x="40" y="1152" font-size="17" fill="#FFB547" font-weight="400" text-anchor="start">EXTERNAL</text>
+<text x="40" y="1180" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Go modules</text>
+<text x="340" y="1152" font-size="18" fill="#E4ECE7" font-weight="400" text-anchor="start">craggy-io/foundation-kit</text>
+<text x="810" y="1152" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">bundle loading, fsx, retryafter</text>
+<text x="340" y="1180" font-size="18" fill="#E4ECE7" font-weight="400" text-anchor="start">craggy-io/script-services</text>
+<text x="810" y="1180" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">Starlark compile, check, run</text>
+<text x="340" y="1208" font-size="18" fill="#E4ECE7" font-weight="400" text-anchor="start">craggy-io/capability-services</text>
+<text x="810" y="1208" font-size="18" fill="#9DAAA3" font-weight="400" text-anchor="start">registry, views, tool projection</text>
+<text x="40" y="1266" font-size="17" fill="#9DAAA3" font-weight="400" text-anchor="start">Each layer imports only layers below it; arch_test.go enforces the external list.</text>
+</g></svg>

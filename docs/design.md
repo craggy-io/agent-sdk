@@ -1,6 +1,9 @@
 # Design
 
 The numbered sections below are the ones code comments cite as `§N`.
+Comments that cite `§N.M` point into section N; the `.M` part is a
+finer-grained anchor from the original design and has no heading of its
+own here.
 They state the invariants, not the implementation; per-package guides
 say how each package keeps them.
 
@@ -41,10 +44,11 @@ every field. Dynamic definitions must extend a loaded one.
 
 Definitions, skills and workflows are bundles (foundation-kit): each
 folder has a `bundle.yaml` listing one contribution per agent, skill or
-workflow, whose id is its name. Shipped, user and project layers are one
-bundle each; a higher layer replaces a lower one by name only through
-an explicit bundle override, and the catalog reloads whole or not at
-all.
+workflow, whose id is its name. Shipped, user and project layers each
+hold any number of independently identified bundles; a higher layer
+replaces a lower contribution by kind and name through an explicit
+bundle override, same-layer conflicts fail, and the catalog reloads
+whole or not at all.
 
 Tool filters: include/exclude globs, a max-effect cap, and an allow
 list exempt from the cap only. Effects rank read-only, then
@@ -128,8 +132,10 @@ registry is the whole integration: new Starlark scripts see it as a
 built-in, agents see it as a tool, with no host changes.
 
 Runtime registration is session-scoped (`define`) until a host
-approves the exact bytes (`promote`), which installs the `.star` file,
-with its `bundle.yaml` entry, into the user definition layer.
+approves the exact bytes (`promote`), which creates or updates that
+definition's own bundle in the user layer
+(`definitions/agentsdk.user.definitions.<name>/agent.star` or
+`workflows/agentsdk.user.workflows.<name>/workflow.star`).
 
 ## 10. Layout
 

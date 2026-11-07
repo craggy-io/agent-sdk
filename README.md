@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/craggy-wordmark-on-dark.svg">
+  <img src="docs/assets/craggy-wordmark-on-light.svg" alt="Craggy" width="300">
+</picture>
+
 # Agent SDK
 
 A Go library for building LLM agents and multi-agent workflows whose
@@ -6,27 +11,45 @@ traces and tools; Starlark scripts define agents and compose them into
 workflows. Adding a capability to the host registry makes it callable from
 new scripts with no host changes.
 
+The module is `github.com/craggy-io/agent-sdk`:
+
+```sh
+go get github.com/craggy-io/agent-sdk@latest
+go install github.com/craggy-io/agent-sdk/cmd/craggy-agent@latest   # optional trace debugger
+```
+
 ## Features
 
-- One Go ReAct loop (project, sample, classify, dispatch, settle) exposed to
-  scripts as built-ins; provider-neutral behind `model.Provider`, with an
-  OpenRouter implementation and scripted test providers included.
-- Agents and workflows defined in Starlark, run by
+- **One ReAct loop:** [project, sample, classify, dispatch, settle](docs/loop.md)
+  in Go, exposed to scripts as built-ins; provider-neutral behind
+  [`model.Provider`](docs/model.md), with an [OpenRouter](docs/openrouter.md)
+  implementation and [scripted test providers](docs/agenttest.md) included.
+- **Agents and workflows in Starlark:** [definitions](docs/agentdef.md) run by
   [script-services](https://github.com/craggy-io/script-services); built-in
-  definitions ship embedded, and user and project definitions are
-  bundles (folders with a `bundle.yaml`) loaded and hot-reloaded by
+  definitions [ship embedded](docs/defs.md), and user and project definitions
+  are bundles (folders with a `bundle.yaml`) loaded and hot-reloaded by
   [foundation-kit](https://github.com/craggy-io/foundation-kit); new
   definitions install at runtime behind an approval gate.
-- Durable workflows: a call-key journal in the append-only trace makes
-  replay-from-top resume work across restarts, including human `ask` gates.
-- Capabilities managed by
+- **Durable workflows:** a [call-key journal](docs/workflow.md) in the
+  append-only [trace](docs/trace.md) makes replay-from-top resume work across
+  restarts, including human `ask` gates.
+- **Capabilities:** managed by
   [capability-services](https://github.com/craggy-io/capability-services):
   register once, call from Starlark, LLM tools, MCP or HTTP. Agents,
-  workflows, LLM sampling and memory are themselves capabilities.
-- Multi-agent runtime: spawn, message, steer, interrupt and resume agents
-  under one shared budget, with a live event stream over the trace.
-- No secrets in the library: API keys and auth are host-supplied; live
+  workflows, LLM sampling and [memory](docs/memory.md) are
+  [themselves capabilities](docs/agentcap.md).
+- **Multi-agent runtime:** [spawn, message, steer, interrupt and resume](docs/host.md)
+  agents under one shared budget, with a live event stream over the trace.
+- **No secrets in the library:** API keys and auth are host-supplied; live
   provider tests run only when explicitly enabled.
+
+## Package architecture
+
+<p align="center">
+  <a href="docs/assets/agent-sdk-architecture.svg">
+    <img src="docs/assets/agent-sdk-architecture.svg" alt="Agent SDK package layers, top to bottom: tools (craggy-agent, examples/host, adapters) import agentcap, which imports workflow, which imports host, which imports the engine (loop, agentdef, openrouter), which imports foundations (model, transcript, config, trace, memory, defs). External: foundation-kit, script-services, capability-services." width="100%">
+  </a>
+</p>
 
 ## Packages
 
@@ -44,33 +67,50 @@ new scripts with no host changes.
 | `workflow` | Durable Starlark workflows: journal, ask gates, resume |
 | `memory` | Durable memory store exposed as capabilities |
 | `agentcap` | Capability bridge: agents, workflows, LLM and memory in a registry |
-| `defs` | The shipped definition bundle: built-in agents, skill and workflows |
+| `defs` | The shipped definition bundles: built-in agents, skill and workflows |
 | `cmd/craggy-agent` | Debug CLI over a trace database |
 | `examples/host` | Runnable host wiring registry, MCP, HTTP and scripts |
 
 See [docs/README.md](docs/README.md) for per-package guides,
 [docs/design.md](docs/design.md) for the invariants code comments cite
-as `§N`, and [AGENTS.md](AGENTS.md) for the integration guide.
+as `§N`, [docs/host-example.md](docs/host-example.md) for the runnable host, and [AGENTS.md](AGENTS.md) for the integration guide.
 
 ## Quick start
 
 ```go
-loader, err := agentdef.Open(ctx, agentdef.Options{
-    Shipped: defs.Sources(), // built-in agents, skill and workflows
-    Project: "res",         // optional: a bundle replacing them by name
-})
-if err != nil { return err }
-h, err := host.Open(ctx, host.Options{
-    Config:   config.Defaults(),
-    Provider: openrouter.New(os.Getenv("OPENROUTER_API_KEY")),
-    View:     host.NewRegistryView(view), // a capability-services registry view
-    Defs:     loader,
-    Trace:    sink,
-})
-if err != nil { return err }
-defer h.Close()
+import (
+    "github.com/craggy-io/agent-sdk/agentdef"
+    "github.com/craggy-io/agent-sdk/config"
+    "github.com/craggy-io/agent-sdk/defs"
+    "github.com/craggy-io/agent-sdk/host"
+    "github.com/craggy-io/agent-sdk/openrouter"
+    tracemem "github.com/craggy-io/agent-sdk/trace/memory"
+    "github.com/craggy-io/capability-services/registry"
+)
 
-res, err := h.RunAgent(ctx, "assistant", "Summarise this repository")
+func run(ctx context.Context) error {
+    loader, err := agentdef.Open(ctx, agentdef.Options{
+        Shipped: defs.Sources(), // built-in agents, skill and workflows
+        Project: "res",          // optional: bundles replacing them by name
+    })
+    if err != nil { return err }
+
+    r := registry.New() // tools the agents may call
+    h, err := host.Open(ctx, host.Options{
+        Config:   config.Defaults(),
+        Provider: openrouter.New(os.Getenv("OPENROUTER_API_KEY")),
+        View:     host.NewRegistryView(r.View(registry.All)),
+        Defs:     loader,
+        Trace:    tracemem.New(), // adapters/tracesqlite for durable runs
+    })
+    if err != nil { return err }
+    defer h.Close()
+
+    res, err := h.RunAgent(ctx, "assistant", "Summarise this repository")
+    if err != nil { return err }
+    fmt.Println(res.Text)
+    return nil
+}
 ```
 
 Definitions are bundles. **Every definition folder needs a
@@ -128,10 +168,10 @@ def run(input):
 
 ## Development
 
-Requires Go 1.27 or newer. Dependencies `github.com/craggy-io/foundation-kit`,
+Requires Go 1.27 or newer. Craggy dependencies:
+`github.com/craggy-io/foundation-kit`,
 `github.com/craggy-io/script-services` and
-`github.com/craggy-io/capability-services` must be fetchable (set
-`GOPRIVATE=github.com/craggy-io/*` while they are private).
+`github.com/craggy-io/capability-services`.
 
 ```sh
 test -z "$(gofmt -l .)"
@@ -144,10 +184,10 @@ for m in adapters/tracesqlite adapters/configyaml cmd/craggy-agent examples/host
 done
 ```
 
-The nested modules depend on tagged releases of this module (no
+The nested modules depend on published versions of this module (no
 `replace` directives): release the core first, then the adapters
 (`adapters/<name>/vX.Y.Z` tags), then move `cmd/craggy-agent` and
-`examples/host` to them. The adapters keep heavy dependencies (SQLite,
+`examples/host` to them. Prefer tags over pseudo-versions when you do. The adapters keep heavy dependencies (SQLite,
 config YAML) out of the core module graph.
 
 Live OpenRouter tests are skipped unless `OPENROUTER_API_KEY` is set and

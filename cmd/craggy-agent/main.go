@@ -80,7 +80,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `craggy-agent - trace debugging for agent-sdk (design 7.3)
+	fmt.Fprint(w, `craggy-agent - trace debugging for agent-sdk (docs/cli.md)
 
 Usage: craggy-agent [--db trace.db] <command> [args]
 
@@ -89,7 +89,7 @@ Live:
       (--agent <name>|--workflow <name>) <task...>
       Runs an agent or workflow via OpenRouter (needs OPENROUTER_API_KEY).
   resume [--root res] --db trace.db <workflow-run-id>
-      Resumes a journaled workflow run (v 6.3).
+      Resumes a journaled workflow run.
   --root (default: a res/ directory here or up to 3 levels above) is the
   project definition layer: a tree of independently identified bundles. Each
   bundle has a bundle.yaml declaring its agents, skills or workflows. Higher

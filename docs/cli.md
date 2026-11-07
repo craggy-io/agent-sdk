@@ -3,8 +3,12 @@
 `cmd/craggy-agent` (its own nested module) is the trace debugger and
 live smoke runner:
 
+```sh
+go install github.com/craggy-io/agent-sdk/cmd/craggy-agent@latest
 ```
-craggy-agent [--root <dir>] [--db trace.db|--mem] [--config session.yaml] run (--agent <name>|--workflow <name>) <task...>
+
+```
+craggy-agent [--root <dir>] [--db trace.db|--mem] run [--config session.yaml] (--agent <name>|--workflow <name>) <task...>
 craggy-agent --db trace.db resume <workflow-run-id>
 craggy-agent --db trace.db runs|tree <run>|step <step> --context|--diff|tools <node>|usage|replay|grep|inputs|recovery|tail|agents
 ```

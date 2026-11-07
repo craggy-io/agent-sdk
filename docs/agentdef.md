@@ -33,9 +33,11 @@ across the catalog. Two bundles defining the same id is a
 bundle cannot use one id for two kinds.
 
 `load()` in agent and workflow files is served by the file's own bundle
-(`./lib/common.star`, `//agents/lib/common.star`) and, as
+(`./lib/common.star` relative to the file, or `//lib/common.star` from the
+bundle root) and, as
 `@<dependency-id>/path`, by bundles its `bundle.yaml` lists under
-`dependencies` (pass those in `Options.Sources`). Modules an agent file
+`dependencies` (pass those in `Options.Sources`); the shipped definitions
+use `load("@agentsdk.shared.common/common.star", ...)`. Modules an agent file
 loads see `tools_filter`, `loop_spec` and `schema`, not `agent`. Prompt
 `{"file": ...}` fragments and `loop.output` schema files are read from
 the agent file's bundle, relative to the file, or a declared `@bundle.id/path` dependency; a path outside the
@@ -54,9 +56,10 @@ Each layer contains any number of independently identified bundles:
 
 A directory with `bundle.yaml` is one bundle; otherwise subdirectories are groups.
 Missing or empty roots are empty layers. Hidden staging directories are skipped.
-Loose `.star` files outside a bundle are errors. Each logical agent, skill or
-workflow should have its own bundle, with its prompt/schema/support files beside
-it. Bundle IDs are unique across layers; they no longer identify an entire layer.
+Loose `.star` files outside a bundle are errors. A bundle may hold several
+contributions (as in the project example above) or just one; the shipped set and
+`promote` use one bundle per agent, skill or workflow so each keeps its
+prompt/schema/support files beside it. Bundle IDs are unique across layers; they no longer identify an entire layer.
 
 User replaces shipped and project replaces both, by kind and contribution name.
 The loader validates each layer through `bundle.Load`, derives explicit
@@ -86,6 +89,13 @@ use `bundle.Live.Edit` to create or update one user bundle each:
 that bundle's identity and replaces its contribution. A conflicting separately
 authored user bundle is rejected. Invalid installs roll back. Edit preserves
 support assets and dependencies, but rewrites manifest formatting and comments.
+
+Hosts that build their own catalog with `bundle.Load` instead of `Open` use
+`SourcesIn(ctx, root)` to discover a layer's bundle tree the same way `Open`
+does, and `Compilers()` for the agent, skill and workflow compilers.
+`WorkflowBuiltins()` lists the predeclared names workflow files are checked
+against, and `ValidateMaxEffect` rejects unknown `max_effect` caps at
+definition time.
 
 ## Definitions
 

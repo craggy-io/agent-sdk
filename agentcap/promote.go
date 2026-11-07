@@ -14,8 +14,8 @@ import (
 
 // Promotion: a dynamic definition or workflow is installed in the user
 // layer of the host's loader (agentdef.Loader.InstallAgent and
-// InstallWorkflow, which add the file and its bundle.yaml entry through
-// bundle.Live.Edit; the bundle validates the name) only when the host's Approve hook accepts the exact
+// InstallWorkflow, which create or update that definition's own bundle
+// through bundle.Live.Edit; the bundle validates the name) only when the host's Approve hook accepts the exact
 // bytes. Agents can propose a definition; they cannot approve it.
 
 func (s *service) approve(ctx context.Context, kind, name string, payload []byte) error {

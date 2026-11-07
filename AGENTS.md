@@ -2,8 +2,8 @@
 
 Use this guide when editing this repository or integrating its Go module,
 `github.com/craggy-io/agent-sdk`, into a consumer. Start with the
-[README quick start](README.md#quick-start) and the executable package
-examples (`*/example_test.go`), which `go test` compiles and checks.
+[README quick start](README.md#quick-start) and the executable example in
+`agentdef/example_test.go`, which `go test` compiles and checks.
 
 ## Choose the owning package
 
@@ -44,14 +44,15 @@ capability-services (`arch_test.go` enforces the list).
 - capability-services owns registration, views, jobs and projections.
   Register capabilities there; never invent a second registry here.
 - Secrets never enter this module: providers take keys at construction,
-  config is Go values, and nothing reads environment variables except the
-  gated live test and `examples/host`.
+  config is Go values, and nothing in the library packages reads environment
+  variables; only the gated live test, `cmd/craggy-agent` and `examples/host`
+  read `OPENROUTER_API_KEY`.
 
 ## Construct the pieces
 
 1. Provider: `openrouter.New(key)` or any `model.Provider`; tests use
    `agenttest.NewScripted(...)`.
-2. Trace sink: `memory.New()` for tests, the SQLite sink in
+2. Trace sink: `trace/memory.New()` for tests, the SQLite sink in
    `adapters/tracesqlite` for durable runs. One writer owns a sink; close it
    after the host.
 3. Definitions: `agentdef.Open(ctx, agentdef.Options{Shipped: defs.Sources(),
@@ -60,7 +61,8 @@ capability-services (`arch_test.go` enforces the list).
 4. Host: `host.Open(ctx, host.Options{...})`; close in reverse order
    (host, then sink, then module sources).
 5. Capabilities (optional): `agentcap.Register(r, h, agentcap.Options{...})`
-   adds `agents.*`, `workflows.*`, `llm.*`, `memory.*` and `trace.*` to a
+   adds `agents.*`, `workflows.*`, `sessions.*`, `recovery.*`, `llm.*`,
+   `memory.*` and `trace.*` to a
    capability-services registry. Runtime `define`/`promote` writes nothing
    unless `Options.Approve` approves it.
 
@@ -107,4 +109,5 @@ capability-services (`arch_test.go` enforces the list).
 - Fully remove obsolete code and all call sites; no deprecation shims.
 - Verify fixes by running tests. The gate is the block in the README
   Development section, including the nested `adapters/tracesqlite` module.
-- Example tests carry `// Output:` checks so quoted docs stay true.
+- Example tests (`example_test.go`) carry `// Output:` checks; add one when a
+  doc snippet needs to stay true.

@@ -739,7 +739,7 @@ func builtinDefine(e *exec, _ *starlark.Thread, args starlark.Tuple, kwargs []st
 		return nil, fmt.Errorf("define: name is required")
 	}
 	if extends == "" {
-		return nil, fmt.Errorf("define: %q must extends an existing definition (design 4.4)", name)
+		return nil, fmt.Errorf("define: %q must extend an existing definition (§4)", name)
 	}
 	d := agentdef.Definition{Name: name, Extends: extends, Profile: profile,
 		Description: description, Workflows: workflows,
