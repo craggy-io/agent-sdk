@@ -1,5 +1,5 @@
-github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-7ff53c1ea1a0 h1:iAKquQbsibNTRdNUm46cuQ5UT1gGNbd8ixW4xzDAW/U=
-github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-7ff53c1ea1a0/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-d57d97eb4780 h1:ob/rNYYbFAKGGNgZGtpxwdGC0n59jLiysG5qWA7gesE=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-d57d97eb4780/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=

@@ -1,9 +1,9 @@
-github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-7ff53c1ea1a0 h1:iAKquQbsibNTRdNUm46cuQ5UT1gGNbd8ixW4xzDAW/U=
-github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-7ff53c1ea1a0/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
-github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.1-0.20261107143611-7ff53c1ea1a0 h1:dmIa0gAYzl0K3q/AiTVS6I2QGOj+GpzKv9+5cJQIl0A=
-github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.1-0.20261107143611-7ff53c1ea1a0/go.mod h1:bIEYlcrdkDjRAJGz4kjJCZ88ASDUs+hnSA3uzG8+oo0=
-github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.1-0.20261107143611-7ff53c1ea1a0 h1:jMQ3QuQSg6+Z58z4iqtroLiELsI9dnxcno5TRdLDNtc=
-github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.1-0.20261107143611-7ff53c1ea1a0/go.mod h1:FZ0COHFJMPwoT5MdlgYFmVKkoLk+FTdyrvkgxYeYvkc=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-d57d97eb4780 h1:ob/rNYYbFAKGGNgZGtpxwdGC0n59jLiysG5qWA7gesE=
+github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-d57d97eb4780/go.mod h1:2HiSw5PUOA4mbLZw0GHKK/ZHs2yhcKvzT24kOB5je70=
+github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.1-0.20261107143611-d57d97eb4780 h1:vaIOYwf+2EoqFA2AqMDjO2SvRm9Z43xcg1vuqqCA9hY=
+github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.1-0.20261107143611-d57d97eb4780/go.mod h1:bIEYlcrdkDjRAJGz4kjJCZ88ASDUs+hnSA3uzG8+oo0=
+github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.1-0.20261107143611-d57d97eb4780 h1:WZ3fSQA2rwo158Z7NaAd+1i1eqPe9ZTWyuYScRyQKuU=
+github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.1-0.20261107143611-d57d97eb4780/go.mod h1:FZ0COHFJMPwoT5MdlgYFmVKkoLk+FTdyrvkgxYeYvkc=
 github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044 h1:CqFvTqWxtX9kWZp2TXv51kfA5HppD5Vxs612d/GfrRc=
 github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044/go.mod h1:Q2LlVzMz+OrYOcF1uK70Nf2qu3K3pS9rvSiDbuyeFIY=
 github.com/craggy-io/foundation-kit v0.0.0-20261107163733-af7e17b71fd2 h1:G4Hyxfpn/VvYdrPhBEzR4zRjQ20ZcOR3kAKma0miToU=
