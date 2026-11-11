@@ -403,14 +403,17 @@ func loadPin(ctx context.Context, sink trace.Sink, runID string) (*pin, error) {
 	return &p, nil
 }
 
-// limits returns the Starlark execution limits for this run: the
-// manifest-agnostic defaults (5M steps, 10 minutes) unless Options
-// overrode them. Time inside blocking built-ins (agent and tool calls)
-// still counts against Limits.Timeout through the context deadline
-// script.Run installs.
+// limits returns the Starlark execution limits for this run. A workflow
+// shares the host session's wall-clock budget unless Options overrides it;
+// the script default still bounds steps. Time inside blocking built-ins
+// (agent and tool calls) counts against the deadline script.Run installs.
 func (e *exec) limits() script.Limits {
 	if e.lim == (script.Limits{}) {
-		return script.DefaultLimits
+		limits := script.DefaultLimits
+		if budget := e.s.Config().Limits.WallClock; budget > 0 {
+			limits.Timeout = budget
+		}
+		return limits
 	}
 	return e.lim
 }
