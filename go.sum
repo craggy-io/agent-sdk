@@ -2,6 +2,8 @@ github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044 h1
 github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044/go.mod h1:Q2LlVzMz+OrYOcF1uK70Nf2qu3K3pS9rvSiDbuyeFIY=
 github.com/craggy-io/foundation-kit v0.0.0-20261107163733-af7e17b71fd2 h1:G4Hyxfpn/VvYdrPhBEzR4zRjQ20ZcOR3kAKma0miToU=
 github.com/craggy-io/foundation-kit v0.0.0-20261107163733-af7e17b71fd2/go.mod h1:grT6r7EVfoxyZ6/GiQuocUvqLOCAsMSh5oOwdzwuHdg=
+github.com/craggy-io/foundation-kit v0.0.0-20261111155413-cf1591268b33 h1:InJ5bgJBXYzCiQqlA9akS2EUkfDcBvVngZg6p0QKeww=
+github.com/craggy-io/foundation-kit v0.0.0-20261111155413-cf1591268b33/go.mod h1:grT6r7EVfoxyZ6/GiQuocUvqLOCAsMSh5oOwdzwuHdg=
 github.com/craggy-io/script-services v0.1.1-0.20261107163800-8eb4b015c1aa h1:oVGyxZBe4sNAWBfuwrFkTOyuTqK9r4oG8iAYy6frvNQ=
 github.com/craggy-io/script-services v0.1.1-0.20261107163800-8eb4b015c1aa/go.mod h1:CjD38mtublr2hnK23WlbPU5ZaG14vk+RV98m0x6Cgro=
 github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=
