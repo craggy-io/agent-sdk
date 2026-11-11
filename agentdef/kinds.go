@@ -47,8 +47,9 @@ const (
 // later. Package workflow runs Unit's top level with its built-ins, then
 // run(input).
 type Workflow struct {
-	Name string
-	Unit *starcompile.Unit
+	Name        string
+	Description string
+	Unit        *starcompile.Unit
 }
 
 // Source returns the workflow's source text.
@@ -153,7 +154,7 @@ func compileSkill(_ context.Context, c bundle.Contribution) (bundle.Compiled[*Sk
 }
 
 func compileWorkflow(_ context.Context, u *starcompile.Unit) (bundle.Compiled[*Workflow], []bundle.Diagnostic) {
-	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Unit: u}}, nil
+	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Description: u.Contribution().Metadata.Description, Unit: u}}, nil
 }
 
 // ParseSource compiles a runtime-supplied definition source (agents.run

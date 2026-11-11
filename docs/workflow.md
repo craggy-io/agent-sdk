@@ -10,13 +10,15 @@ workflow runner, so `host.RunWorkflow` and the loop's opt-in
 returns the workflow run ID to pass to `Resume` later.
 
 A catalogued workflow is an `agentsdk.workflow@1` contribution of a
-definition bundle (see [agentdef](agentdef.md)): its bundle.yaml lists
-it, and its id is the name `Run` takes. It is checked against the
+definition bundle (see [agentdef](agentdef.md)): its bundle.yaml declares
+it as `application` or lists it as a contribution, and its id is the name `Run` takes. It is checked against the
 workflow built-ins when the bundle loads, and `load()` reaches its own
 bundle and the dependencies that bundle declares (starcompile). Ad-hoc
 source passed to `Run` has no bundle, so it cannot `load()`. Resume
 refuses a catalogued workflow whose source changed since the run
-started.
+started. A top-level bundle `description` becomes the workflow's trace
+description and is pinned on first run; it takes precedence over a script's
+optional `workflow(description = ...)` value.
 
 A workflow file declares `WORKFLOW = workflow(description, input,
 agents, profiles, limits)` (`input` is a field dict of `schema.*`

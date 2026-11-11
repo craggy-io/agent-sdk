@@ -24,14 +24,15 @@ func TestCataloguedWorkflowLoadsSupportFile(t *testing.T) {
 	shipped := fstest.MapFS{
 		"bundle.yaml": {Data: []byte(`apiVersion: craggy.io/bundle/v1
 metadata: {id: agentsdk.shipped, version: 1.0.0}
-contributions:
-  - {id: greet, kind: agentsdk.workflow@1, path: workflows/greet.star}
+title: Greeting
+description: Greet loudly.
+application: {id: greet, kind: agentsdk.workflow@1, path: workflows/greet.star}
 `)},
 		// A support file: undeclared, only load()ed.
 		"workflows/lib/text.star": {Data: []byte("def shout(s):\n    return s.upper() + \"!\"\n")},
 		"workflows/greet.star": {Data: []byte(`load("./lib/text.star", "shout")
 
-WORKFLOW = workflow(description = "Greet loudly.", input = {"message": schema.string(required = True)})
+WORKFLOW = workflow(input = {"message": schema.string(required = True)})
 
 def run(input):
     r = agent("base", task = shout(input.message), phase = "greet")
@@ -42,10 +43,14 @@ def run(input):
 	if err != nil {
 		t.Fatal(err)
 	}
+	if wf, ok := defs.Workflow("greet"); !ok || wf.Description != "Greet loudly." {
+		t.Fatalf("catalogued description = %+v, found = %v", wf, ok)
+	}
 	var ran atomic.Int32
+	sink := tracemem.New()
 	s, err := host.Open(ctx, host.Options{
 		Config: config.Defaults(), View: testView(&ran), Provider: &taskProvider{},
-		Defs: defs, Trace: tracemem.New(),
+		Defs: defs, Trace: sink,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +63,19 @@ def run(input):
 	m, _ := res.Value.(map[string]any)
 	if res.Status != workflow.StatusDone || !strings.Contains(m["text"].(string), "HELLO!") {
 		t.Fatalf("result=%+v", res)
+	}
+	events, _, err := sink.ReadEvents(ctx, 0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var described bool
+	for _, event := range events {
+		if event.Type == "wf.manifest" && strings.Contains(string(event.Data), `"description":"Greet loudly."`) {
+			described = true
+		}
+	}
+	if !described {
+		t.Fatalf("workflow trace omitted bundle description: %+v", events)
 	}
 }
 

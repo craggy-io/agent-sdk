@@ -6,8 +6,8 @@ shared compiler (`starcompile`).
 
 ## Bundles
 
-Definitions live in bundles: folders with a `bundle.yaml` that lists
-every agent, skill and workflow as a contribution. **A folder needs a
+Definitions live in bundles: folders with a `bundle.yaml` that declares
+one `application` or lists agents, skills and workflows as contributions. **A folder needs a
 `bundle.yaml`**; nothing is discovered from file names or folder
 layout, and files the manifest does not list are only support files
 (helpers that definition files `load()`, prompt and schema files).
@@ -20,6 +20,10 @@ contributions:
   - {id: example-review, kind: agentsdk.skill@1, path: skills/example-review/SKILL.md}
   - {id: layered, kind: agentsdk.workflow@1, path: workflows/layered.star}
 ```
+
+A bundle with one workflow can declare its display description at the top
+level and use `application: {id: ..., kind: agentsdk.workflow@1, path: ...}`.
+The catalogued workflow carries that description into its pinned trace.
 
 | Kind | File | Value |
 | --- | --- | --- |

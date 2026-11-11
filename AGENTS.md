@@ -68,7 +68,8 @@ capability-services (`arch_test.go` enforces the list).
 
 ## Definition bundles
 
-- **Every definition folder needs a `bundle.yaml`** listing each agent
+- **Every definition folder needs a `bundle.yaml`** declaring one
+  `application` or listing each agent
   (`agentsdk.agent@1`), skill (`agentsdk.skill@1`, a `SKILL.md`) and
   workflow (`agentsdk.workflow@1`) as a contribution whose `id` is its
   name. Never generate a manifest from a folder layout or file names, in

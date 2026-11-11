@@ -153,6 +153,7 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 			wf = cur
 		}
 	}
+	wf.Description = pin.Description
 	if got := configHash(s); got != pin.ConfigHash {
 		return Result{Status: StatusResumeIncompatible, RunID: runID},
 			fmt.Errorf("workflow: resume %s: session config changed since the run started", runID)
@@ -359,6 +360,7 @@ func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source st
 // pin is the wf.start payload (§6.3 replay pins).
 type pin struct {
 	Name           string     `json:"name,omitempty"`
+	Description    string     `json:"description,omitempty"`
 	SourceHash     string     `json:"source_hash"`
 	SourceBlob     trace.Hash `json:"source_blob"`
 	InputBlob      trace.Hash `json:"input_blob"`
@@ -377,7 +379,7 @@ func (e *exec) pinStart(ctx context.Context, input map[string]any) error {
 	if err != nil {
 		return err
 	}
-	p := pin{Name: e.wf.Name, SourceHash: hashBytes([]byte(e.source)), SourceBlob: srcHash,
+	p := pin{Name: e.wf.Name, Description: e.wf.Description, SourceHash: hashBytes([]byte(e.source)), SourceBlob: srcHash,
 		InputBlob: inHash, ConfigHash: configHash(e.s), RuntimeVersion: RuntimeVersion, Path: e.path}
 	b, _ := json.Marshal(p)
 	return e.journal.rec.Emit(ctx, trace.Event{Type: "wf.start", SessionID: e.s.ID(),
@@ -460,6 +462,9 @@ func (e *exec) loadScript(ctx context.Context, thread *starlark.Thread) (starlar
 	e.man = mv.man
 	if e.man == nil {
 		e.man = &manifest{}
+	}
+	if e.wf.Description != "" {
+		e.man.Description = e.wf.Description
 	}
 	return globals, nil
 }
