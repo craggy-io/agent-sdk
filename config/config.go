@@ -79,8 +79,11 @@ func Defaults() SessionConfig {
 				Reasoning:         model.ReasoningCfg{Effort: "medium"},
 				MaxOutputTokens:   16000,
 				ParallelToolCalls: true,
-				Provider:          model.ProviderPrefs{RequireParameters: true, DataCollection: "deny"},
-				Cache:             "auto",
+				// No data_collection: the OpenRouter account's own privacy
+				// settings decide, and a request that says "deny" overrides
+				// them. A host that wants it says so in its config.
+				Provider: model.ProviderPrefs{RequireParameters: true},
+				Cache:    "auto",
 			},
 			"fast": {
 				Model:     "openai/gpt-5.2-mini",

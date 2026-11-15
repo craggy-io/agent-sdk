@@ -2,7 +2,8 @@
 
 Session configuration as Go values: `SessionConfig{Profiles, Limits,
 Loop, Input, Events}`, `Defaults()` (profiles `default`/`fast`/`deep`,
-provider data collection denied), and `Resolve(base, layers, want)`
+provider data collection left to the OpenRouter account's privacy
+settings), and `Resolve(base, layers, want)`
 implementing the layering rules of design §3 — limits minimise, loop
 fields last-wins, profiles remap then resolve with fallback to
 `default`. `ParseSize` accepts `32KiB`-style sizes.

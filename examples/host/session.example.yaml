@@ -9,6 +9,8 @@ profiles:
     reasoning: {effort: medium}
     max_output_tokens: 16000
     parallel_tool_calls: true
+    # data_collection: deny overrides the OpenRouter account's privacy
+    # settings for every request; leave it out to let the account decide.
     provider: {require_parameters: true, data_collection: deny}
     cache: auto
 limits:

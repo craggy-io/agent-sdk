@@ -35,7 +35,11 @@ environment.
 
 Profiles in [config](config.md) carry the OpenRouter routing knobs
 (`fallbacks`, `provider.require_parameters`, `provider.data_collection`,
-`cache`); definitions name profiles, never models.
+`cache`); definitions name profiles, never models. `data_collection` is
+sent only when a profile sets it, because a request that sets it
+overrides the account's own privacy settings: `deny` can leave a model
+with no provider the account would otherwise use. `Defaults()` leaves it
+empty.
 
 ## Testing
 
