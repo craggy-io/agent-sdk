@@ -34,6 +34,97 @@ func DecodeArgs(raw json.RawMessage) (json.RawMessage, bool) {
 	return json.RawMessage(trimmed), true
 }
 
+// NormalizeStructuredArgs decodes JSON-encoded object and array fields when
+// the tool schema expects those shapes. Ordinary string fields stay strings.
+// Validation still runs on the resulting arguments before dispatch.
+func NormalizeStructuredArgs(schema, args json.RawMessage) json.RawMessage {
+	if len(schema) == 0 {
+		return args
+	}
+	sv, err := decodeUseNumber(schema)
+	if err != nil {
+		return args
+	}
+	dv, err := decodeUseNumber(args)
+	if err != nil {
+		return args
+	}
+	if !normalizeStructured(sv, &dv) {
+		return args
+	}
+	out, err := json.Marshal(dv)
+	if err != nil {
+		return args
+	}
+	return out
+}
+
+func normalizeStructured(schema any, value *any) bool {
+	s, ok := schema.(map[string]any)
+	if !ok {
+		return false
+	}
+	changed := false
+	if encoded, ok := (*value).(string); ok {
+		trimmed := bytes.TrimSpace([]byte(encoded))
+		if len(trimmed) > 0 && !acceptsType(s, "string") &&
+			((trimmed[0] == '{' && acceptsType(s, "object")) ||
+				(trimmed[0] == '[' && acceptsType(s, "array"))) {
+			if decoded, err := decodeUseNumber(trimmed); err == nil {
+				*value = decoded
+				changed = true
+			}
+		}
+	}
+	switch v := (*value).(type) {
+	case map[string]any:
+		props, _ := s["properties"].(map[string]any)
+		for key, child := range v {
+			childSchema, found := props[key]
+			if !found {
+				childSchema = s["additionalProperties"]
+			}
+			if normalizeStructured(childSchema, &child) {
+				v[key] = child
+				changed = true
+			}
+		}
+	case []any:
+		for i, child := range v {
+			if normalizeStructured(s["items"], &child) {
+				v[i] = child
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+func acceptsType(schema map[string]any, want string) bool {
+	switch t := schema["type"].(type) {
+	case string:
+		if t == want {
+			return true
+		}
+	case []any:
+		for _, item := range t {
+			if item == want {
+				return true
+			}
+		}
+	}
+	for _, key := range []string{"anyOf", "oneOf"} {
+		if choices, ok := schema[key].([]any); ok {
+			for _, choice := range choices {
+				if sub, ok := choice.(map[string]any); ok && acceptsType(sub, want) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func decodeUseNumber(raw json.RawMessage) (any, error) {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.UseNumber()

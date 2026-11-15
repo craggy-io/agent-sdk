@@ -132,6 +132,7 @@ func (r *runner) dispatchStep(d *dispatch, settleWhy *settlement) stepOutcome {
 				"invalid arguments: not valid JSON (even after one level of double-encoding)"),
 				reason: model.SettleInvalidArgs}
 		default:
+			args = jschema.NormalizeStructuredArgs(tool.Schema, args)
 			if err := jschema.Validate(tool.Schema, args); err != nil {
 				p.blocked = &settledResult{res: invalidArgs(err), reason: model.SettleInvalidArgs}
 			}

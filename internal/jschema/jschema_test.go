@@ -82,3 +82,44 @@ func TestDecodeArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeStructuredArgs(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"argv":{"type":["null","array"],"items":{"type":"string"}},"overrides":{"type":["null","object"],"properties":{"network":{"type":"string"}}},"nested":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}}}}},"command":{"type":"string"},"free":{}}}`)
+	in := json.RawMessage(`{"argv":"[\"env\",\"\"]","overrides":"{\"network\":\"egress\"}","nested":"[{\"ids\":\"[\\\"a\\\"]\"}]","command":"[\"keep\"]","free":"{\"keep\":true}"}`)
+	got := jschema.NormalizeStructuredArgs(schema, in)
+	want := json.RawMessage(`{"argv":["env",""],"overrides":{"network":"egress"},"nested":[{"ids":["a"]}],"command":"[\"keep\"]","free":"{\"keep\":true}"}`)
+	var a, b any
+	if err := json.Unmarshal(got, &a); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(want, &b); err != nil {
+		t.Fatal(err)
+	}
+	if string(mustJSON(t, a)) != string(mustJSON(t, b)) {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if err := jschema.Validate(schema, got); err != nil {
+		t.Fatal(err)
+	}
+	bad := json.RawMessage(`{"argv":"not JSON"}`)
+	if string(jschema.NormalizeStructuredArgs(schema, bad)) != string(bad) {
+		t.Fatal("malformed structured string changed")
+	}
+	if err := jschema.Validate(schema, jschema.NormalizeStructuredArgs(schema, bad)); err == nil {
+		t.Fatal("malformed structured string passed validation")
+	}
+	union := json.RawMessage(`{"type":"object","properties":{"value":{"anyOf":[{"type":"object"},{"type":"string"}]}}}`)
+	encoded := json.RawMessage(`{"value":"{\"literal\":true}"}`)
+	if string(jschema.NormalizeStructuredArgs(union, encoded)) != string(encoded) {
+		t.Fatal("a field that accepts strings was coerced")
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
