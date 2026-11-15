@@ -74,11 +74,15 @@ func Defaults() SessionConfig {
 	return SessionConfig{
 		Profiles: map[string]Profile{
 			"default": {
-				Model:             "anthropic/claude-sonnet-5.5",
-				Fallbacks:         []string{"openai/gpt-5.2"},
-				Reasoning:         model.ReasoningCfg{Effort: "medium"},
-				MaxOutputTokens:   16000,
-				ParallelToolCalls: true,
+				Model:           "anthropic/claude-sonnet-5.5",
+				Fallbacks:       []string{"openai/gpt-5.2"},
+				Reasoning:       model.ReasoningCfg{Effort: "medium"},
+				MaxOutputTokens: 16000,
+				// No parallel_tool_calls: with require_parameters, OpenRouter
+				// routes only to providers that list every parameter sent, and
+				// it lists that one for none of these models' providers, so
+				// every request 404s. Left out, each provider's own default
+				// applies, which allows parallel calls where supported.
 				// No data_collection: the OpenRouter account's own privacy
 				// settings decide, and a request that says "deny" overrides
 				// them. A host that wants it says so in its config.

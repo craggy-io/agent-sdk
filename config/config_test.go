@@ -15,7 +15,7 @@ func TestDefaults(t *testing.T) {
 	d := config.Defaults()
 	def := d.Profiles["default"]
 	if def.Model != "anthropic/claude-sonnet-5.5" || def.MaxOutputTokens != 16000 ||
-		!def.ParallelToolCalls || def.Cache != "auto" || def.Reasoning.Effort != "medium" ||
+		def.ParallelToolCalls || def.Cache != "auto" || def.Reasoning.Effort != "medium" ||
 		!def.Provider.RequireParameters || def.Provider.DataCollection != "" ||
 		len(def.Fallbacks) != 1 || def.Fallbacks[0] != "openai/gpt-5.2" {
 		t.Errorf("default profile=%+v", def)
