@@ -26,6 +26,10 @@ func TestBuiltinCatalogueResolves(t *testing.T) {
 		if r.SystemPrompt == "" {
 			t.Errorf("%s: empty system prompt", name)
 		}
+		// Every shipped agent takes a memory when one is installed.
+		if len(r.Seeks) != 1 || r.Seeks[0] != (agentdef.Seek{Slot: "memory", Optional: true}) {
+			t.Errorf("%s seeks %+v, want memory, optionally", name, r.Seeks)
+		}
 	}
 	rev, err := l.Resolve("reviewer", nil)
 	if err != nil {

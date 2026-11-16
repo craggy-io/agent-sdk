@@ -10,6 +10,9 @@ agent(
         fragment("conduct", "Be concise and factual. Prefer evidence from tools over assumptions. Say plainly when something is unverified or failed."),
         fragment("investigation", "When investigating, inspect the relevant sources before answering, and trace each claim to evidence you actually saw."),
     ],
+    # A memory, when something installed fills the slot: its tools, how to
+    # use them and its skills. Without one the agent works without.
+    seeks = [seek("memory", optional = True)],
     tools = tools_filter(max_effect = "any"),
     loop = loop_spec(max_steps = 80, completion = "text"),
 )

@@ -12,7 +12,7 @@ Each agent, skill and workflow is its own bundle with its own
 
 | Folder | Bundle ID | Contributes |
 | --- | --- | --- |
-| `definitions/base/` | `agentsdk.shipped.agent.base` | `base`: the root every other agent extends |
+| `definitions/base/` | `agentsdk.shipped.agent.base` | `base`: the root every other agent extends. It seeks the slot `memory`, optionally, so every agent built on it gets whatever memory is installed |
 | `definitions/assistant/` | `agentsdk.shipped.agent.assistant` | `assistant`: interactive work, may delegate to `reviewer` |
 | `definitions/reviewer/` | `agentsdk.shipped.agent.reviewer` | `reviewer`: evidence-based review with a structured verdict (profile `deep`) |
 | `skills/example-review/` | `agentsdk.shipped.skill.example-review` | `example-review`: a sample `SKILL.md` |
