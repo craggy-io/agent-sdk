@@ -48,6 +48,7 @@ func helpers() starlark.StringDict {
 	return starlark.StringDict{
 		"tools_filter": starlark.NewBuiltin("tools_filter", specBuiltin("tools_filter")),
 		"loop_spec":    starlark.NewBuiltin("loop_spec", specBuiltin("loop_spec")),
+		"seek":         starlark.NewBuiltin("seek", seekBuiltin),
 		"schema":       scriptschema.Module(),
 	}
 }
@@ -73,7 +74,7 @@ func specBuiltin(name string) func(*starlark.Thread, *starlark.Builtin, starlark
 func (c *collector) agentBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name, extends, description, profile string
 	var promptV, toolsV, loopV starlark.Value
-	var skillsV, delegatesV *starlark.List
+	var skillsV, delegatesV, seeksV *starlark.List
 	var workflows bool
 	if err := starlark.UnpackArgs("agent", args, kwargs,
 		"name", &name,
@@ -85,6 +86,7 @@ func (c *collector) agentBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args s
 		"skills?", &skillsV,
 		"delegates?", &delegatesV,
 		"workflows?", &workflows,
+		"seeks?", &seeksV,
 		"loop?", &loopV,
 	); err != nil {
 		return nil, err
@@ -110,6 +112,9 @@ func (c *collector) agentBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args s
 		return nil, err
 	}
 	if d.Delegates, err = strList("delegates", delegatesV); err != nil {
+		return nil, err
+	}
+	if d.Seeks, err = decodeSeeks(name, seeksV); err != nil {
 		return nil, err
 	}
 	if loopV != nil {
@@ -222,6 +227,69 @@ func (c *collector) decodePromptEntry(agent string, i int, v starlark.Value) (Pr
 		e.Text = string(b)
 	}
 	return e, nil
+}
+
+// seekBuiltin is seek(slot, optional = False, prefer = ""): one entry of
+// an agent's seeks, as a dict agent() decodes.
+func seekBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var slot, prefer string
+	var optional bool
+	if err := starlark.UnpackArgs("seek", args, kwargs, "slot", &slot, "optional?", &optional, "prefer?", &prefer); err != nil {
+		return nil, err
+	}
+	d := new(starlark.Dict)
+	_ = d.SetKey(starlark.String("slot"), starlark.String(slot))
+	_ = d.SetKey(starlark.String("optional"), starlark.Bool(optional))
+	_ = d.SetKey(starlark.String("prefer"), starlark.String(prefer))
+	return d, nil
+}
+
+// decodeSeeks reads seeks: each entry a slot's name, which the agent needs,
+// or a seek(...).
+func decodeSeeks(agent string, l *starlark.List) ([]Seek, error) {
+	if l == nil {
+		return nil, nil
+	}
+	var out []Seek
+	seen := map[string]bool{}
+	iter := l.Iterate()
+	defer iter.Done()
+	var item starlark.Value
+	for i := 0; iter.Next(&item); i++ {
+		var s Seek
+		switch v := item.(type) {
+		case starlark.String:
+			s.Slot = string(v)
+		case *starlark.Dict:
+			for _, kv := range v.Items() {
+				key, _ := kv[0].(starlark.String)
+				switch string(key) {
+				case "slot":
+					str, _ := kv[1].(starlark.String)
+					s.Slot = string(str)
+				case "prefer":
+					str, _ := kv[1].(starlark.String)
+					s.Prefer = string(str)
+				case "optional":
+					b, _ := kv[1].(starlark.Bool)
+					s.Optional = bool(b)
+				default:
+					return nil, fmt.Errorf("agent %s: seeks entry %d: unknown key %q", agent, i, string(key))
+				}
+			}
+		default:
+			return nil, fmt.Errorf("agent %s: seeks entry %d must be a slot's name or seek(...), got %s", agent, i, item.Type())
+		}
+		if err := ValidSlot(s.Slot); err != nil {
+			return nil, fmt.Errorf("agent %s: seeks entry %d: %w", agent, i, err)
+		}
+		if seen[s.Slot] {
+			return nil, fmt.Errorf("agent %s: seeks %q twice", agent, s.Slot)
+		}
+		seen[s.Slot] = true
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 func decodeTools(agent string, v starlark.Value) (model.FilterSpec, error) {

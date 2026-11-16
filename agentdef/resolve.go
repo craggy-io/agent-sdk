@@ -19,6 +19,15 @@ import (
 // (otherwise today, UTC). The chain and skills come from one catalog, so
 // a reload in progress never mixes two versions.
 func (l *Loader) Resolve(name string, vars map[string]any) (*Resolved, error) {
+	return l.ResolveFilled(name, vars, nil)
+}
+
+// ResolveFilled resolves a catalogued definition with slots filled: each
+// filler's prompt follows the definition's own fragments as slot.<slot>,
+// its skills join the agent's, its tools are pinned (Resolved.Pinned) and
+// the tools of the other fillers of the same slot are left out. A fill
+// for a slot the agent doesn't seek is allowed: the host decides.
+func (l *Loader) ResolveFilled(name string, vars map[string]any, fills []Fill) (*Resolved, error) {
 	cat := l.Catalog()
 	d, ok := lookup(cat, AgentKind, name)
 	if !ok {
@@ -28,12 +37,18 @@ func (l *Loader) Resolve(name string, vars map[string]any) (*Resolved, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolveChain(cat, chain, vars)
+	return resolveChain(cat, chain, vars, fills)
 }
 
 // ResolveDynamic resolves a runtime-built definition. It must extends an
 // existing catalogued definition — a variant, not a blank slate.
 func (l *Loader) ResolveDynamic(d Definition, vars map[string]any) (*Resolved, error) {
+	return l.ResolveDynamicFilled(d, vars, nil)
+}
+
+// ResolveDynamicFilled is ResolveDynamic with slots filled, as
+// ResolveFilled.
+func (l *Loader) ResolveDynamicFilled(d Definition, vars map[string]any, fills []Fill) (*Resolved, error) {
 	if d.Name == "" {
 		return nil, fmt.Errorf("agentdef: dynamic definition needs a name")
 	}
@@ -52,7 +67,7 @@ func (l *Loader) ResolveDynamic(d Definition, vars map[string]any) (*Resolved, e
 	if err != nil {
 		return nil, err
 	}
-	return resolveChain(cat, chain, vars)
+	return resolveChain(cat, chain, vars, fills)
 }
 
 // chainOf returns the inheritance chain root-first, detecting cycles and
@@ -148,7 +163,7 @@ func toolsInheritParent(d *Definition, isRoot bool) bool {
 	return len(t.Include) == 0 && len(t.Exclude) == 0 && t.MaxEffect == "" && len(t.Allow) == 0
 }
 
-func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any) (*Resolved, error) {
+func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any, fills []Fill) (*Resolved, error) {
 	if vars == nil {
 		vars = map[string]any{}
 	}
@@ -227,6 +242,10 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any)
 			r.Delegates = unionStrings(r.Delegates, d.Delegates)
 			r.Provenance["delegates"] = d.Name
 		}
+		for _, seek := range d.Seeks {
+			r.Seeks = mergeSeek(r.Seeks, seek)
+			r.Provenance["seeks."+seek.Slot] = d.Name
+		}
 		// Loop: field by field; output replaced.
 		mergeLoop(&r.Loop, d.Loop, d.Name, r.Provenance)
 		if d.Loop.Output != nil {
@@ -241,6 +260,12 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any)
 		for _, f := range frags {
 			r.Provenance["prompt."+f.name] = f.source
 		}
+	}
+
+	// What the fillers bring comes after everything the chain wrote.
+	var err error
+	if frags, err = applyFills(cat, r, frags, fills); err != nil {
+		return nil, err
 	}
 
 	if outputRef != "" {
@@ -294,6 +319,17 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any)
 		r.SystemPrompt += strings.TrimRight(list.String(), "\n")
 	}
 	return r, nil
+}
+
+// mergeSeek adds a seek, replacing an earlier seek of the same slot.
+func mergeSeek(seeks []Seek, seek Seek) []Seek {
+	for i, s := range seeks {
+		if s.Slot == seek.Slot {
+			seeks[i] = seek
+			return seeks
+		}
+	}
+	return append(seeks, seek)
 }
 
 func mergeLoop(dst *LoopSpec, src LoopSpec, from string, prov map[string]string) {

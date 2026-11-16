@@ -75,8 +75,8 @@ func WorkflowBuiltins() []string {
 	return append(append([]string(nil), workflowBuiltins...), triggercompile.Names()...)
 }
 
-// Compilers returns the compilers for AgentKind, SkillKind and
-// WorkflowKind. Open uses them; a host that builds its own catalog with
+// Compilers returns the compilers for AgentKind, SkillKind,
+// WorkflowKind, WorkflowBindingKind and SlotFillerKind. Open uses them; a host that builds its own catalog with
 // bundle.Load adds them.
 //
 // Agent and workflow files compile through script-services' shared
@@ -89,6 +89,7 @@ func WorkflowBuiltins() []string {
 func Compilers() []bundle.AnyCompiler {
 	return []bundle.AnyCompiler{
 		bindingCompiler(),
+		fillerCompiler(),
 		bundle.Compile(AgentKind, starcompile.Compiler(agentOptions(), compileAgent)),
 		bundle.Compile(SkillKind, compileSkill),
 		bundle.Compile(WorkflowKind, starcompile.Compiler(workflowOptions(), compileWorkflow)),
@@ -99,7 +100,7 @@ func Compilers() []bundle.AnyCompiler {
 // it loads see only the helpers.
 func agentOptions() starcompile.Options {
 	return starcompile.Options{
-		Check:             check.Env{Predeclared: []string{"agent", "tools_filter", "loop_spec", "schema"}},
+		Check:             check.Env{Predeclared: []string{"agent", "tools_filter", "loop_spec", "seek", "schema"}},
 		ModulePredeclared: helpers(),
 	}
 }

@@ -27,6 +27,7 @@
 //	    ],
 //	    tools = tools_filter(max_effect = "read-only"),
 //	    skills = ["example-review"],
+//	    seeks = ["memory", seek("search", optional = True)],
 //	    loop = loop_spec(max_steps = 40, completion = "structured",
 //	                     output = schema.object({"verdict": schema.string()})),
 //	)
@@ -86,7 +87,9 @@ type Definition struct {
 	Skills      []string         `json:"skills,omitempty"`
 	Delegates   []string         `json:"delegates,omitempty"`
 	Workflows   bool             `json:"workflows,omitempty"`
-	Loop        LoopSpec         `json:"loop,omitempty"`
+	// Seeks are the slots the agent wants filled when it runs (slots.go).
+	Seeks []Seek   `json:"seeks,omitempty"`
+	Loop  LoopSpec `json:"loop,omitempty"`
 	// Source is the declaring file's path in its bundle (for example
 	// "agents/reviewer.star"); empty for Go-built ones.
 	Source string `json:"source,omitempty"`
@@ -117,7 +120,14 @@ type Resolved struct {
 	Skills      []string          `json:"skills,omitempty"`
 	Delegates   []string          `json:"delegates,omitempty"`
 	Workflows   bool              `json:"workflows,omitempty"`
-	Loop        LoopSpec          `json:"loop,omitempty"`
+	// Seeks are the slots the chain seeks, a later definition's seek of a
+	// slot replacing an earlier one's.
+	Seeks []Seek   `json:"seeks,omitempty"`
+	Loop  LoopSpec `json:"loop,omitempty"`
+	// Filled are the slots this resolution was given fillers for, and
+	// Pinned the tools those fillers bring, which are always offered.
+	Filled []Filled `json:"filled,omitempty"`
+	Pinned []string `json:"pinned,omitempty"`
 
 	// SystemPrompt is the single rendered system message: fragments
 	// joined with a blank line, skills catalogue last.

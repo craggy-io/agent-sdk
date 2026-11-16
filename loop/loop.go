@@ -141,6 +141,10 @@ type Policy struct {
 	// plus tools_load, which adds an on-demand group's tools (§4.3).
 	// Off by default: the whole view is advertised.
 	ProgressiveTools bool
+	// PinnedTools are tool names, each of which may end in *, that
+	// progressive loading never defers whatever group they are in: the
+	// tools a filled slot brings (agentdef.Resolved.Pinned).
+	PinnedTools []string
 	// BudgetNoticeAt are the fractions of a limit at which the agent is
 	// told how much budget remains and to wrap up (runway.go): once per
 	// fraction, the first a wrap-up notice, later ones urgent. Each

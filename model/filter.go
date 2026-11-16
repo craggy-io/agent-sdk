@@ -38,7 +38,9 @@ func matchName(pattern, name string) bool {
 	return ok
 }
 
-func anyMatch(patterns []string, name string) bool {
+// MatchAny reports whether name matches any of the globs, as a filter's
+// include, exclude and allow lists match tool names.
+func MatchAny(patterns []string, name string) bool {
 	for _, p := range patterns {
 		if matchName(p, name) {
 			return true
@@ -51,13 +53,13 @@ func anyMatch(patterns []string, name string) bool {
 // admits all effects; an unrecognised MaxEffect admits nothing (fail closed)
 // except the tools Allow names.
 func (f FilterSpec) Allows(t Tool) bool {
-	if len(f.Include) > 0 && !anyMatch(f.Include, t.Name) {
+	if len(f.Include) > 0 && !MatchAny(f.Include, t.Name) {
 		return false
 	}
-	if anyMatch(f.Exclude, t.Name) {
+	if MatchAny(f.Exclude, t.Name) {
 		return false
 	}
-	if anyMatch(f.Allow, t.Name) {
+	if MatchAny(f.Allow, t.Name) {
 		return true
 	}
 	switch f.MaxEffect {

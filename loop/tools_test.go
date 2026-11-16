@@ -178,3 +178,27 @@ func TestUnknownToolSuggestions(t *testing.T) {
 		}
 	}
 }
+
+// A pinned tool is advertised from the start though its group is on
+// demand, and loading its group doesn't list it twice.
+func TestProgressiveToolsKeepPinnedTools(t *testing.T) {
+	prov := agenttest.NewScripted(
+		agenttest.CallsResponse(call("a", "web_search", `{}`)),
+		agenttest.CallsResponse(call("b", "tools_load", `{"groups":["web"]}`)),
+		agenttest.TextResponse("done"),
+	)
+	h, res := runLoop(t, prov, groupedTools(), loop.Policy{ProgressiveTools: true, PinnedTools: []string{"web_s*"}}, nil)
+	if res.Status != "done" {
+		t.Fatalf("status=%q", res.Status)
+	}
+	first := strings.Join(toolNames(prov.Requests[0].Tools), ",")
+	if !strings.HasPrefix(first, "jobs_wait,web_search,loose,") || strings.Contains(first, "web_fetch") {
+		t.Fatalf("initial tools = %s", first)
+	}
+	if rs := resultsOf(h); rs[0].IsError || rs[0].Text != "ok:web_search" {
+		t.Fatalf("pinned call result = %+v", rs[0])
+	}
+	if got := strings.Join(toolNames(prov.Requests[2].Tools), ","); got != first+",web_fetch" {
+		t.Fatalf("tools after load = %s", got)
+	}
+}

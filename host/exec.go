@@ -35,6 +35,9 @@ type ExecSpec struct {
 	// validator for structured completions (loop.OutputCheck).
 	OutputCheck        loop.OutputCheck
 	OutputCheckRetries int
+	// Fills are the slots filled for this run (agentdef.ResolveFilled).
+	// They apply to this agent only, not to the agents it delegates to.
+	Fills []agentdef.Fill
 
 	// internal wiring (handles)
 	handleID   string
@@ -83,6 +86,13 @@ func WithOutput(schema json.RawMessage) RunOption {
 // BeforeStop hook error. See loop.OutputCheck.
 func WithOutputCheck(check loop.OutputCheck, maxRetries int) RunOption {
 	return func(e *ExecSpec) { e.OutputCheck, e.OutputCheckRetries = check, maxRetries }
+}
+
+// WithFills fills slots for this run: each filler's prompt, skills and
+// tools are added to the agent's, and the tools of the other fillers of
+// the same slot are left out (agentdef.ResolveFilled).
+func WithFills(fills ...agentdef.Fill) RunOption {
+	return func(e *ExecSpec) { e.Fills = append([]agentdef.Fill(nil), fills...) }
 }
 
 // RunAgent runs one agent to completion via the implicit agent-turn (§2).
@@ -405,9 +415,9 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	var resolved *agentdef.Resolved
 	var err error
 	if spec.Def != nil {
-		resolved, err = s.defs.ResolveDynamic(*spec.Def, spec.Vars)
+		resolved, err = s.defs.ResolveDynamicFilled(*spec.Def, spec.Vars, spec.Fills)
 	} else {
-		resolved, err = s.defs.Resolve(spec.Name, spec.Vars)
+		resolved, err = s.defs.ResolveFilled(spec.Name, spec.Vars, spec.Fills)
 	}
 	if err != nil {
 		return Result{}, err
@@ -639,6 +649,7 @@ func policyFrom(eff config.Effective, r *agentdef.Resolved, spec ExecSpec) loop.
 	if ls.ProgressiveTools != nil {
 		p.ProgressiveTools = *ls.ProgressiveTools
 	}
+	p.PinnedTools = r.Pinned
 	if ls.ClearResultsAt != nil {
 		p.ClearResultsAt = *ls.ClearResultsAt
 	}

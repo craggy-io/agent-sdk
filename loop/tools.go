@@ -23,7 +23,7 @@ func (r *runner) initTools() {
 	}
 	onDemand := onDemandGroups(r.deps.Tools.Groups())
 	for _, t := range r.deps.Tools.Tools() {
-		if onDemand[t.Group] {
+		if r.deferred(t, onDemand) {
 			r.progressive = true
 			break
 		}
@@ -63,6 +63,12 @@ func onDemandGroups(groups []model.ToolGroup) map[string]bool {
 	return out
 }
 
+// deferred reports whether progressive loading holds a tool back until its
+// group is loaded: its group is on demand and the policy doesn't pin it.
+func (r *runner) deferred(t model.Tool, onDemand map[string]bool) bool {
+	return onDemand[t.Group] && !model.MatchAny(r.policy.PinnedTools, t.Name)
+}
+
 // load marks group loaded; it reports false when it already was.
 func (r *runner) load(group string) bool {
 	r.toolsMu.Lock()
@@ -98,7 +104,7 @@ func (r *runner) viewTools() []model.Tool {
 	onDemand := onDemandGroups(r.deps.Tools.Groups())
 	var out []model.Tool
 	for _, t := range all {
-		if !onDemand[t.Group] {
+		if !r.deferred(t, onDemand) {
 			out = append(out, t)
 		}
 	}
@@ -118,7 +124,7 @@ func (r *runner) loadedTools() []model.Tool {
 			continue
 		}
 		for _, t := range all {
-			if t.Group == g {
+			if t.Group == g && r.deferred(t, onDemand) {
 				out = append(out, t)
 			}
 		}
@@ -258,7 +264,7 @@ func (r *runner) unloadedTools() map[string]string {
 		delete(onDemand, g)
 	}
 	for _, t := range r.deps.Tools.Tools() {
-		if onDemand[t.Group] {
+		if r.deferred(t, onDemand) {
 			out[t.Name] = t.Group
 		}
 	}

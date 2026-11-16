@@ -30,6 +30,7 @@ The catalogued workflow carries that description into its pinned trace.
 | `agentsdk.agent@1` (`AgentKind`) | `.star` calling `agent(...)` exactly once; `name` must equal the contribution `id` | `*Definition` |
 | `agentsdk.skill@1` (`SkillKind`) | `SKILL.md`: front matter (`name`, `description`) and a body fetched on demand; a `name` must equal the `id` | `*Skill` |
 | `agentsdk.workflow@1` (`WorkflowKind`) | workflow `.star`, checked at load, run by package `workflow` | `*Workflow` |
+| `agentsdk.slot-filler@1` (`SlotFillerKind`) | YAML: what fills a slot an agent seeks (see "Slots") | `*Filler` |
 
 All three kinds are global: an id names one agent, skill or workflow
 across the catalog. Two bundles defining the same id is a
@@ -104,7 +105,7 @@ definition time.
 ## Definitions
 
 `agent(name, extends, description, profile, prompt, tools, skills,
-delegates, workflows, loop)` where `tools` is a
+delegates, workflows, seeks, loop)` where `tools` is a
 `tools_filter(include, exclude, max_effect, allow, inherit)` and
 `loop` a `loop_spec(max_steps, completion, output, ...)`; `output`
 accepts `schema.*` values, raw schema dicts, JSON strings or a schema
@@ -121,3 +122,41 @@ resolves a runtime definition, which must extend a catalogued one.
 `ParseSource` compiles a runtime source declaring exactly one agent
 without cataloguing it (the runtime-registration path); it has no
 bundle, so nothing to `load()` and no files to read.
+
+## Slots
+
+An agent says what it wants by the name of a **slot**, not by the bundle
+that provides it: `seeks = ["memory", seek("search", optional = True,
+prefer = "craggy-memory")]`. A plain name is needed; `seek()` can make
+it optional and name the filler the agent prefers when it is installed.
+Seeks merge along the chain: a later definition's seek of a slot
+replaces an earlier one's. A slot is lower-case words joined by hyphens.
+
+What fills a slot is an `agentsdk.slot-filler@1` contribution of the
+bundle that provides it, a YAML file:
+
+```yaml
+slot: memory
+title: Agent Memory (Basic)   # what a person chooses it by
+description: One line about it.
+priority: 10                  # highest wins when nothing else decides
+tools: [memory_*]             # the tool names it brings; may end in *
+prompt: activation.md         # how to use them, beside this file
+skills: [memory-notebook]     # skills it brings, from any bundle
+seed: memory.seed             # optional: a capability the host calls when a conversation starts
+```
+
+It must bring tools, a prompt or skills. `Fillers(cat, slot)` (and
+`Loader.Fillers`) lists a slot's fillers, highest priority first, then by
+name. Choosing one is the host's business: this package only ranks them.
+
+`ResolveFilled(name, vars, fills)` (and `ResolveDynamicFilled`) resolves
+with slots filled. For each `Fill{Slot, Filler}`: the filler's prompt is
+a fragment `slot.<slot>` after every fragment the chain wrote, rendered
+as a template like the others; its skills join the agent's catalogue;
+its tools are listed in `Resolved.Pinned`, which `host` hands the loop
+as `PinnedTools` so progressive loading never defers them; and the tools
+of every other filler of the same slot are added to the filter's
+`exclude`. `Resolved.Filled` records what was filled, and
+`Provenance["slot.<slot>"]` the filler. `Resolve` is `ResolveFilled`
+with none.
