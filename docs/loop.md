@@ -15,3 +15,11 @@ errored samples never dispatch; an empty completion is never
 success. Built-in tools: `complete` (structured mode), `skill`,
 `result_read`, `tools_load`, plus whatever the `Delegate` advertises
 (the host's agent/workflow controls).
+
+Each request is sent the run's own `Input.System`, in place of the
+system item the thread was started with; the stored transcript keeps
+the first. A conversation is therefore always held to its agent as it
+resolves now: an edited definition, or a slot filled by another filler
+(`agentdef` "Slots"), reaches the next turn. `Policy.PinnedTools`
+(names, each may end in `*`) are never deferred by progressive
+loading, whatever their group.

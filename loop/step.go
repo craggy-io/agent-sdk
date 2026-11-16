@@ -72,7 +72,7 @@ func (r *runner) step(ctx context.Context, stepNum int) (out stepOutcome, err er
 	for {
 		// PROJECT: pure normalisation of the transcript (§5.4).
 		projected, repairs := r.project(ctx)
-		projected = r.withCatalogue(projected)
+		projected = r.withCatalogue(r.withSystem(projected))
 		req := r.buildRequest(projected)
 		if !charged {
 			// Budgets are charged before the work (§5.7).

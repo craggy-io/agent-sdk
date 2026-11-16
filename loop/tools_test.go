@@ -202,3 +202,19 @@ func TestProgressiveToolsKeepPinnedTools(t *testing.T) {
 		t.Fatalf("tools after load = %s", got)
 	}
 }
+
+// A later run on a thread is sent its own system prompt, not the one the
+// thread began with, and the stored transcript keeps the first.
+func TestALaterRunIsSentItsOwnSystemPrompt(t *testing.T) {
+	prov := agenttest.NewScripted(agenttest.TextResponse("first"), agenttest.TextResponse("second"))
+	h, _ := runLoop(t, prov, nil, loop.Policy{}, nil)
+	runLoop(t, prov, nil, loop.Policy{}, func(in *loop.Input, _ *loop.Deps) {
+		in.Thread, in.Task, in.System = h.thread, "next turn", "you are a changed agent"
+	})
+	if got := systemText(prov.Requests[1]); got != "you are a changed agent" {
+		t.Fatalf("the second run was sent %q", got)
+	}
+	if got := h.thread.Items()[0]; got.Kind != model.KindSystem || got.Text != "you are a test agent" {
+		t.Fatalf("the stored system item is %+v", got)
+	}
+}

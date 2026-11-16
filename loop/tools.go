@@ -314,6 +314,28 @@ func toolCatalogue(tools []model.Tool, groups []model.ToolGroup, progressive boo
 	return "## Tool groups\n\n" + intro + "\n\n" + strings.Join(lines, "\n")
 }
 
+// withSystem sends the run's system prompt in place of the one a thread
+// was started with, for this request only: the stored transcript is never
+// edited (rule 1). A thread outlives the definition it began under, and
+// each run resolves the definition again (with the slots it fills), so a
+// conversation is always held to what its agent is now.
+func (r *runner) withSystem(projected []model.Item) []model.Item {
+	if r.in.System == "" {
+		return projected
+	}
+	for i := range projected {
+		if projected[i].Kind == model.KindSystem {
+			if projected[i].Text == r.in.System {
+				return projected
+			}
+			out := append([]model.Item(nil), projected...)
+			out[i].Text = r.in.System
+			return out
+		}
+	}
+	return projected
+}
+
 // withCatalogue appends the tool catalogue to the projection's system
 // item (or adds one) for this request only: the stored transcript is
 // never edited (rule 1), and a thread that outlives a change to the
