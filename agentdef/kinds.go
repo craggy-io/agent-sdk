@@ -2,7 +2,10 @@ package agentdef
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/craggy-io/foundation-kit/trigger"
+	"github.com/craggy-io/script-services/triggercompile"
 	"io/fs"
 	"path"
 	"strings"
@@ -50,6 +53,8 @@ type Workflow struct {
 	Name        string
 	Description string
 	Unit        *starcompile.Unit
+	Triggers    []trigger.Spec
+	InputSchema json.RawMessage
 }
 
 // Source returns the workflow's source text.
@@ -66,7 +71,9 @@ var workflowBuiltins = []string{
 
 // WorkflowBuiltins returns the predeclared names workflow files are
 // checked against when they load.
-func WorkflowBuiltins() []string { return append([]string(nil), workflowBuiltins...) }
+func WorkflowBuiltins() []string {
+	return append(append([]string(nil), workflowBuiltins...), triggercompile.Names()...)
+}
 
 // Compilers returns the compilers for AgentKind, SkillKind and
 // WorkflowKind. Open uses them; a host that builds its own catalog with
@@ -81,6 +88,7 @@ func WorkflowBuiltins() []string { return append([]string(nil), workflowBuiltins
 // reloads.
 func Compilers() []bundle.AnyCompiler {
 	return []bundle.AnyCompiler{
+		bindingCompiler(),
 		bundle.Compile(AgentKind, starcompile.Compiler(agentOptions(), compileAgent)),
 		bundle.Compile(SkillKind, compileSkill),
 		bundle.Compile(WorkflowKind, starcompile.Compiler(workflowOptions(), compileWorkflow)),
@@ -98,8 +106,8 @@ func agentOptions() starcompile.Options {
 
 func workflowOptions() starcompile.Options {
 	return starcompile.Options{Check: check.Env{
-		Predeclared:       workflowBuiltins,
-		ModulePredeclared: workflowBuiltins,
+		Predeclared:       WorkflowBuiltins(),
+		ModulePredeclared: WorkflowBuiltins(),
 	}}
 }
 
@@ -153,8 +161,17 @@ func compileSkill(_ context.Context, c bundle.Contribution) (bundle.Compiled[*Sk
 	return bundle.Compiled[*Skill]{Value: sk}, nil
 }
 
-func compileWorkflow(_ context.Context, u *starcompile.Unit) (bundle.Compiled[*Workflow], []bundle.Diagnostic) {
-	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Description: u.Contribution().Metadata.Description, Unit: u}}, nil
+func compileWorkflow(ctx context.Context, u *starcompile.Unit) (bundle.Compiled[*Workflow], []bundle.Diagnostic) {
+	specs, input, err := workflowDeclaration(ctx, u)
+	if err != nil {
+		return bundle.Compiled[*Workflow]{}, u.Diagnostics(err)
+	}
+	for _, spec := range specs {
+		if err := ValidateMapping(spec, input); err != nil {
+			return bundle.Compiled[*Workflow]{}, u.Diagnostics(err)
+		}
+	}
+	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Description: u.Contribution().Metadata.Description, Unit: u, Triggers: specs, InputSchema: input}}, nil
 }
 
 // ParseSource compiles a runtime-supplied definition source (agents.run

@@ -192,3 +192,5 @@ config YAML) out of the core module graph.
 
 Live OpenRouter tests are skipped unless `OPENROUTER_API_KEY` is set and
 `AGENT_SDK_LIVE=1`.
+
+See [shared triggers](docs/triggers.md) for event bindings, schedules and durable admission.

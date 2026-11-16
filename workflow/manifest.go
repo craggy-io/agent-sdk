@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/craggy-io/script-services/triggercompile"
 	"sort"
 	"time"
 
@@ -80,10 +81,13 @@ func (v *manifestValue) Hash() (uint32, error) { return 0, fmt.Errorf("unhashabl
 // profiles, limits) at file scope (§6.1).
 func workflowBuiltin(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var desc string
-	var inputV, agentsV, profilesV, limitsV starlark.Value
+	var inputV, agentsV, profilesV, limitsV, triggersV starlark.Value
 	if err := starlark.UnpackArgs("workflow", args, kwargs,
 		"description?", &desc, "input?", &inputV, "agents?", &agentsV,
-		"profiles?", &profilesV, "limits?", &limitsV); err != nil {
+		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV); err != nil {
+		return nil, err
+	}
+	if _, err := triggercompile.List(triggersV); err != nil {
 		return nil, err
 	}
 	m := &manifest{Description: desc}

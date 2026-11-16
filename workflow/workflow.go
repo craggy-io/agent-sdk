@@ -55,6 +55,8 @@ type Options struct {
 	// RunID pins the workflow run ID (generated when empty). Resume
 	// sets it to the original run.
 	RunID string
+	// ExpectedDigest rejects a catalogue revision different from the admitted one.
+	ExpectedDigest string
 	// Resume replays the journal of RunID instead of starting fresh.
 	Resume bool
 	// NodePath is the journal node path prefix for nested runs.
@@ -104,6 +106,9 @@ func RunEx(ctx context.Context, s *host.Host, nameOrSource string, input map[str
 	wf, source, err := resolveSource(ctx, s, nameOrSource)
 	if err != nil {
 		return Result{Status: "failed: workflow_not_found"}, err
+	}
+	if opts.ExpectedDigest != "" && (wf.Unit == nil || wf.Unit.Ref().Digest != opts.ExpectedDigest) {
+		return Result{RunID: opts.RunID, Status: StatusResumeIncompatible}, fmt.Errorf("workflow: admitted revision changed")
 	}
 	return execute(ctx, s, wf, source, input, opts)
 }

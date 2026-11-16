@@ -74,6 +74,7 @@ func layerRefs(cat *bundle.Catalog, exclude map[string]bool) map[definitionKey]b
 	addRefs(out, cat, AgentKind, exclude)
 	addRefs(out, cat, SkillKind, exclude)
 	addRefs(out, cat, WorkflowKind, exclude)
+	addRefs(out, cat, WorkflowBindingKind, exclude)
 	return out
 }
 

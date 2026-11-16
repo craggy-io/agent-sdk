@@ -73,6 +73,7 @@ func Open(ctx context.Context, opts Options) (*Loader, error) {
 // folders again on every load.
 func (l *Loader) options(ctx context.Context) (bundle.Options, error) {
 	o, err := l.layerOptions(ctx)
+	o.Validators = append(o.Validators, ValidateBindings)
 	if err != nil {
 		return bundle.Options{}, err
 	}
