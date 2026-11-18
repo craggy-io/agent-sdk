@@ -347,35 +347,8 @@ func (c *collector) decodeLoop(agent string, v starlark.Value) (LoopSpec, error)
 		if !ok {
 			return l, fmt.Errorf("agent %s: loop keys must be strings", agent)
 		}
-		val := kv[1]
-		var err error
-		switch string(key) {
-		case "max_steps":
-			l.MaxSteps, err = intPtr("loop.max_steps", val)
-		case "completion":
-			l.Completion, err = strPtr("loop.completion", val)
-			if err == nil && *l.Completion != "text" && *l.Completion != "structured" {
-				return l, fmt.Errorf("agentdef: %s: loop.completion %q, want text|structured", agent, *l.Completion)
-			}
-		case "output":
-			l.Output, err = c.outputSchema(agent, val)
-		case "tool_result_bytes":
-			l.ToolResultBytes, err = sizePtr("loop.tool_result_bytes", val)
-		case "wait_jobs":
-			l.WaitJobs, err = durationPtr("loop.wait_jobs", val)
-		case "compact_at":
-			l.CompactAt, err = floatPtr("loop.compact_at", val)
-		case "keep_recent_tokens":
-			l.KeepRecentTokens, err = intPtr("loop.keep_recent_tokens", val)
-		case "summary_tokens":
-			l.SummaryTokens, err = intPtr("loop.summary_tokens", val)
-		case "progressive_tools":
-			l.ProgressiveTools, err = boolPtr("loop.progressive_tools", val)
-		case "clear_results_at":
-			l.ClearResultsAt, err = floatPtr("loop.clear_results_at", val)
-		case "keep_recent_results":
-			l.KeepRecentResults, err = intPtr("loop.keep_recent_results", val)
-		default:
+		handled, err := c.decodeLoopField(agent, string(key), kv[1], &l)
+		if !handled {
 			return l, fmt.Errorf("agent %s: unknown loop key %q", agent, string(key))
 		}
 		if err != nil {
@@ -383,6 +356,47 @@ func (c *collector) decodeLoop(agent string, v starlark.Value) (LoopSpec, error)
 		}
 	}
 	return l, nil
+}
+
+func (c *collector) decodeLoopField(agent, field string, value starlark.Value, loop *LoopSpec) (bool, error) {
+	var err error
+	switch field {
+	case "max_steps":
+		loop.MaxSteps, err = intPtr("loop.max_steps", value)
+	case "completion":
+		loop.Completion, err = completionPtr(agent, value)
+	case "output":
+		loop.Output, err = c.outputSchema(agent, value)
+	case "tool_result_bytes":
+		loop.ToolResultBytes, err = sizePtr("loop.tool_result_bytes", value)
+	case "wait_jobs":
+		loop.WaitJobs, err = durationPtr("loop.wait_jobs", value)
+	case "compact_at":
+		loop.CompactAt, err = floatPtr("loop.compact_at", value)
+	case "keep_recent_tokens":
+		loop.KeepRecentTokens, err = intPtr("loop.keep_recent_tokens", value)
+	case "summary_tokens":
+		loop.SummaryTokens, err = intPtr("loop.summary_tokens", value)
+	case "progressive_tools":
+		loop.ProgressiveTools, err = boolPtr("loop.progressive_tools", value)
+	case "pinned_tools":
+		loop.PinnedTools, err = valueStrList("loop.pinned_tools", value)
+	case "clear_results_at":
+		loop.ClearResultsAt, err = floatPtr("loop.clear_results_at", value)
+	case "keep_recent_results":
+		loop.KeepRecentResults, err = intPtr("loop.keep_recent_results", value)
+	default:
+		return false, nil
+	}
+	return true, err
+}
+
+func completionPtr(agent string, value starlark.Value) (*string, error) {
+	completion, err := strPtr("loop.completion", value)
+	if err == nil && *completion != "text" && *completion != "structured" {
+		return nil, fmt.Errorf("agentdef: %s: loop.completion %q, want text|structured", agent, *completion)
+	}
+	return completion, err
 }
 
 // outputSchema converts a schema.* value, a dict, an inline JSON string

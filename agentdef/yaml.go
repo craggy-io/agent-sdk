@@ -23,13 +23,19 @@ type Behavior struct {
 
 type agentTools struct {
 	model.FilterSpec
-	Inherit *bool `json:"inherit"`
+	Inherit      *bool    `json:"inherit"`
+	Progressive  *bool    `json:"progressive"`
+	AlwaysLoaded []string `json:"always_loaded"`
 }
 
-func (t agentTools) filter() model.FilterSpec {
+func (t agentTools) apply(d *Definition) {
 	f := t.FilterSpec
 	f.Inherit = t.Inherit == nil || *t.Inherit
-	return f
+	d.Tools = f
+	d.Loop.ProgressiveTools = t.Progressive
+	if t.AlwaysLoaded != nil {
+		d.Loop.PinnedTools = append([]string{}, t.AlwaysLoaded...)
+	}
 }
 
 type agentFile struct {
@@ -65,7 +71,7 @@ func agentCompiler(ctx context.Context, c bundle.Contribution) (bundle.Compiled[
 	d := &Definition{Name: f.Name, Description: f.Description, Profile: f.Profile, Extends: f.Extends,
 		Skills: f.Skills, Prompt: f.Prompt, Source: c.Path, Tools: model.FilterSpec{Inherit: true}}
 	if f.Tools != nil {
-		d.Tools = f.Tools.filter()
+		f.Tools.apply(d)
 		if err := ValidateMaxEffect(d.Name, d.Tools.MaxEffect); err != nil {
 			return fail(err)
 		}

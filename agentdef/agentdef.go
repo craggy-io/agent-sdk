@@ -71,6 +71,7 @@ type LoopSpec struct {
 	KeepRecentTokens  *int           `json:"keep_recent_tokens,omitempty"`
 	SummaryTokens     *int           `json:"summary_tokens,omitempty"`
 	ProgressiveTools  *bool          `json:"progressive_tools,omitempty"`
+	PinnedTools       []string       `json:"pinned_tools,omitempty"`
 	ClearResultsAt    *float64       `json:"clear_results_at,omitempty"`
 	KeepRecentResults *int           `json:"keep_recent_results,omitempty"`
 }

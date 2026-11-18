@@ -33,3 +33,28 @@ func TestYAMLBehaviorDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestYAMLToolsProgressivePolicy(t *testing.T) {
+	files := fstest.MapFS{
+		"bundle.yaml": file("apiVersion: craggy.io/bundle/v1\nmetadata: {id: chat.demo, version: 1.0.0}\ncontributions:\n  - {id: demo, kind: agentsdk.agent@1, path: agent.yaml}\n"),
+		"agent.yaml":  file("name: demo\ntools:\n  include: ['*']\n  exclude: []\n  progressive: true\n  always_loaded: [skill, result_read]\nloop: loop.star\n"),
+		"loop.star":   file("def run(step, max_steps):\n    step()\n"),
+	}
+	l, err := agentdef.Open(context.Background(), agentdef.Options{Shipped: []bundle.Source{bundle.Embedded("demo", files)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := l.Resolve("demo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Tools.Include) != 1 || r.Tools.Include[0] != "*" || len(r.Tools.Exclude) != 0 {
+		t.Fatalf("tools = %+v", r.Tools)
+	}
+	if r.Loop.ProgressiveTools == nil || !*r.Loop.ProgressiveTools {
+		t.Fatalf("progressive tools = %v", r.Loop.ProgressiveTools)
+	}
+	if got := strings.Join(r.Loop.PinnedTools, ","); got != "skill,result_read" {
+		t.Fatalf("pinned tools = %q", got)
+	}
+}

@@ -26,6 +26,7 @@ var testBehaviorAgents = [][2]string{
 	{"custom-all", "tools: {}"},
 	{"custom-read", "tools:\n  max_effect: read-only"},
 	{"custom-filter", "tools:\n  include: [echo, secret, missing]\n  exclude: [secret]"},
+	{"custom-progressive", "tools:\n  progressive: true\n  always_loaded: [echo]"},
 }
 
 // testRoot writes testAgents as a project-layer bundle, with its
@@ -51,7 +52,7 @@ func testRoot(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	loop := "def run(step, max_steps):\n    status, value = step()\n"
+	loop := "def run(step, max_steps):\n    for _ in range(max_steps):\n        status, value = step()\n        if status == 'actions':\n            status = value()\n        if status != 'continue':\n            return\n"
 	if err := os.WriteFile(filepath.Join(root, "agents", "loop.star"), []byte(loop), 0o644); err != nil {
 		t.Fatal(err)
 	}

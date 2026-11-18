@@ -594,7 +594,7 @@ func policyFrom(eff config.Effective, r *agentdef.Resolved, spec ExecSpec) loop.
 	if ls.ProgressiveTools != nil {
 		p.ProgressiveTools = *ls.ProgressiveTools
 	}
-	p.PinnedTools = r.Pinned
+	p.PinnedTools = append(append([]string(nil), r.Pinned...), ls.PinnedTools...)
 	if ls.ClearResultsAt != nil {
 		p.ClearResultsAt = *ls.ClearResultsAt
 	}

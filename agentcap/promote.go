@@ -204,6 +204,9 @@ func loopArgs(l agentdef.LoopSpec) []string {
 		}
 		args = append(args, "progressive_tools = "+v)
 	}
+	if l.PinnedTools != nil {
+		args = append(args, "pinned_tools = "+qList(l.PinnedTools))
+	}
 	f("clear_results_at", l.ClearResultsAt)
 	i("keep_recent_results", l.KeepRecentResults)
 	sort.Strings(args) // stable output for review diffs; order is irrelevant

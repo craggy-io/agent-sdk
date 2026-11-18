@@ -377,6 +377,10 @@ func mergeLoop(dst *LoopSpec, src LoopSpec, from string, prov map[string]string)
 		dst.ProgressiveTools = src.ProgressiveTools
 	}
 	set("progressive_tools", src.ProgressiveTools != nil)
+	if src.PinnedTools != nil {
+		dst.PinnedTools = append([]string{}, src.PinnedTools...)
+	}
+	set("pinned_tools", src.PinnedTools != nil)
 	if src.ClearResultsAt != nil {
 		dst.ClearResultsAt = src.ClearResultsAt
 	}

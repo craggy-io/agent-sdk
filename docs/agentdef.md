@@ -115,6 +115,23 @@ stem), `{"replace": "name", "text"/"file": ...}`, `{"remove":
 "name"}`; a dict prompt appends named fragments in order. Skills come
 only from `SKILL.md` contributions.
 
+A YAML agent keeps progressive tool disclosure with its tool grant:
+
+```yaml
+tools:
+  include: ["*"]
+  exclude: []
+  progressive: true
+  always_loaded: [skill, result_read]
+```
+
+Omitting `tools`, or using `tools: {}`, inherits every tool already exposed
+by the runtime. `progressive` defaults to false. `always_loaded` contains
+tool-name patterns and maps to the loop's pinned tools. It can keep a
+permitted grouped tool in the initial request, but cannot restore an excluded
+or runtime-absent tool. Starlark definitions express the same policy with
+`loop_spec(progressive_tools = True, pinned_tools = [...])`.
+
 `Resolve` applies inheritance (design §4) from one catalog and renders
 the system prompt with `{{.Agent.Name}}`, `{{.Date}}` and
 `{{.Vars.*}}` templates (`missingkey=error`). `ResolveDynamic`
