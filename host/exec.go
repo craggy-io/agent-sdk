@@ -23,7 +23,7 @@ type ExecSpec struct {
 	// DefinitionCatalog pins a workflow's roles to its accepted snapshot.
 	DefinitionCatalog *bundle.Catalog
 	OnLocalCall       loop.CallObserver
-	// LocalBehavior requires a compiled chat loop with only local tools.
+	// LocalBehavior requires a compiled authored chat loop.
 	LocalBehavior bool
 	Name          string               // definition name (empty when Def is set)
 	Def           *agentdef.Definition // dynamic definition (§4.4; must extend a loaded def)
@@ -387,9 +387,6 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	view := parent.view
 	if view == nil {
 		view = s.view
-	}
-	if resolved.Behavior != nil {
-		view = NewMapView(nil, nil)
 	}
 	view = narrow(view, resolved.Tools)
 	if spec.Tools != nil {

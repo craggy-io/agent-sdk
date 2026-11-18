@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Consolidation gate. Usage: consolidation_gate.py [base-ref]   (default: HEAD)
 Judges only what this change touched. Exit 0 = clean, 1 = FAIL lines to fix, 2 = gate could not run."""
-import json, pathlib, re, subprocess, sys, tempfile
+import json, os, pathlib, re, subprocess, sys, tempfile
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "HEAD"
 MAX_LEN, MAX_CCN, MAX_FILE, MIN_TOKENS = 80, 15, 600, 50
@@ -9,6 +9,8 @@ SRC = re.compile(r"\.(go|py|ts|tsx|js|jsx|c|cc|cpp|h|hpp|cs|dart|rs|java|kt)$")
 STALE = re.compile(r"\w*(V[2-9]|_v[2-9]|Legacy|_legacy|_old|_new|Deprecated|_copy|_backup)\b")
 
 def sh(*cmd):
+    if os.name == "nt" and cmd[0] == "npx":
+        cmd = ("cmd", "/d", "/c", *cmd)
     return subprocess.run(cmd, capture_output=True, text=True).stdout
 
 try:

@@ -65,11 +65,6 @@ func Run(ctx context.Context, deps Deps, in Input) (Result, error) {
 	if deps.Provider == nil {
 		return Result{}, fmt.Errorf("loop: nil Provider")
 	}
-	if in.Behavior != nil {
-		// Authored chat loops can read their pinned skills. They have no
-		// registry, peer, or workflow authority.
-		deps.Tools, deps.Delegate = nil, nil
-	}
 	r := &runner{
 		deps: deps, in: in, policy: in.Policy.withDefaults(),
 		thread: in.Thread, budget: deps.Budget,

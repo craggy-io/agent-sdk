@@ -22,6 +22,12 @@ var testAgents = [][2]string{
 	{"lazy", `agent(name = "lazy", profile = "default", prompt = [{"p": "You are lazy."}], tools = tools_filter(include = ["echo"]), loop = loop_spec(progressive_tools = True))`},
 }
 
+var testBehaviorAgents = [][2]string{
+	{"custom-all", "tools: {}"},
+	{"custom-read", "tools:\n  max_effect: read-only"},
+	{"custom-filter", "tools:\n  include: [echo, secret, missing]\n  exclude: [secret]"},
+}
+
 // testRoot writes testAgents as a project-layer bundle, with its
 // bundle.yaml, and returns its directory.
 func testRoot(t *testing.T) string {
@@ -37,6 +43,17 @@ func testRoot(t *testing.T) string {
 		if err := os.WriteFile(filepath.Join(root, "agents", a[0]+".star"), []byte(a[1]+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+	for _, a := range testBehaviorAgents {
+		manifest.WriteString("  - {id: " + a[0] + ", kind: agentsdk.agent@1, path: agents/" + a[0] + ".yaml}\n")
+		body := "name: " + a[0] + "\nprofile: default\nprompt:\n  - {name: role, text: Test agent.}\n" + a[1] + "\nloop: loop.star\n"
+		if err := os.WriteFile(filepath.Join(root, "agents", a[0]+".yaml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loop := "def run(step, max_steps):\n    status, value = step()\n"
+	if err := os.WriteFile(filepath.Join(root, "agents", "loop.star"), []byte(loop), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "bundle.yaml"), []byte(manifest.String()), 0o644); err != nil {
 		t.Fatal(err)

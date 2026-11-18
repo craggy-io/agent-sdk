@@ -50,7 +50,7 @@ func TestAuthoredBatchSettlement(t *testing.T) {
 	}
 }
 
-func TestAuthoredLoopCannotDispatchRegistryCalls(t *testing.T) {
+func TestAuthoredLoopInheritsRegistryAndBuiltins(t *testing.T) {
 	globals, err := starlark.ExecFile(&starlark.Thread{Name: "test"}, "loop.star", "def run(step, max_steps):\n    status, act = step()\n    act()\n    step()", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -58,19 +58,24 @@ func TestAuthoredLoopCannotDispatchRegistryCalls(t *testing.T) {
 	globals.Freeze()
 	registry := newFakeTools().echoTools("echo")
 	provider := agenttest.NewScripted(agenttest.CallsResponse(call("external", "echo", "{}")), agenttest.TextResponse("finished"))
-	h, res := runLoop(t, provider, registry, loop.Policy{}, func(in *loop.Input, _ *loop.Deps) { in.Behavior = globals["run"].(*starlark.Function) })
-	if res.Status != loop.StatusDone || len(registry.called()) > 0 {
+	h, res := runLoop(t, provider, registry, loop.Policy{}, func(in *loop.Input, _ *loop.Deps) {
+		in.Behavior = globals["run"].(*starlark.Function)
+		in.Skills = map[string]string{"format": "Use metric units."}
+	})
+	if res.Status != loop.StatusDone || len(registry.called()) != 1 || registry.called()[0] != "echo" {
 		t.Fatalf("status=%s calls=%v", res.Status, registry.called())
 	}
 	results := resultsOf(h)
-	if len(results) != 1 || !results[0].IsError {
+	if len(results) != 1 || results[0].IsError {
 		t.Fatalf("unexpected results: %v", results)
 	}
-	for _, req := range provider.Requests {
-		for _, tool := range req.Tools {
-			if tool.Name == "echo" {
-				t.Fatal("registry tool offered to authored loop")
-			}
+	for _, want := range []string{"echo", "skill"} {
+		found := false
+		for _, tool := range provider.Requests[0].Tools {
+			found = found || tool.Name == want
+		}
+		if !found {
+			t.Fatalf("%s missing from authored-loop tools: %+v", want, provider.Requests[0].Tools)
 		}
 	}
 }
