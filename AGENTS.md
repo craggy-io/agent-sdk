@@ -11,10 +11,10 @@ Use this guide when editing this repository or integrating its Go module,
 | --- | --- |
 | Talk to a model; define requests, tools, usage | [model](docs/model.md) |
 | Store or transform conversation history | [transcript](docs/transcript.md) |
-| Run the ReAct loop directly | [loop](docs/loop.md) |
+| Implement host-enforced sampling and settlement | [loop](docs/loop.md) |
 | Record or replay runs | [trace](docs/trace.md) |
 | Profiles, limits, budgets as Go values | [config](docs/config.md) |
-| Define agents in Starlark | [agentdef](docs/agentdef.md) |
+| Load YAML and Starlark agent definitions | [agentdef](docs/agentdef.md) |
 | Own threads, runs, peers, events | [host](docs/host.md) |
 | Durable multi-agent workflows in Starlark | [workflow](docs/workflow.md) |
 | Durable memory for agents and scripts | [memory](docs/memory.md) |

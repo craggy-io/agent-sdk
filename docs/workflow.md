@@ -40,3 +40,13 @@ outcomes block until `ResolveRecovery`. `ListWaiting` rebuilds
 pending gates after a restart. Errors a script must recover from
 come back as values (tool results carry `is_error`); Go errors abort
 the run, because Starlark has no handlers.
+
+## Installed chat workflows
+
+Declare `chat=True` in `WORKFLOW = workflow(...)`. The chat script receives
+`input.message` and calls its own named roles with `agent(name, task=...)`.
+Return the final role result. Role definitions resolve against one installed
+catalogue snapshot, including loop and skill inheritance across declared bundle
+dependencies. Interactive sends share a budget and retain a conversation thread
+per role. Standalone replay verifies the catalogue digest before reusing the
+journal. Installing a different role revision invalidates that replay.

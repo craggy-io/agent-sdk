@@ -13,6 +13,13 @@ import (
 //go:embed definitions skills workflows shared
 var embedded embed.FS
 
+// AgentTurn is the SDK's single-agent workflow as shipped.
+//
+//go:embed workflows/agent-turn/agent-turn.star
+var agentTurn string
+
+func AgentTurn() string { return agentTurn }
+
 // Sources returns one source per authored bundle, including shared helpers.
 func Sources() []bundle.Source {
 	manifests, err := fs.Glob(embedded, "*/*/bundle.yaml")

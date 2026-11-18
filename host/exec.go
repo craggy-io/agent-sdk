@@ -14,19 +14,25 @@ import (
 	"github.com/craggy-io/agent-sdk/loop"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/agent-sdk/trace"
+	"github.com/craggy-io/foundation-kit/bundle"
 )
 
 // ExecSpec is one agent execution request. Workflow and agentcap build
 // these; RunAgent is the top-level convenience wrapper.
 type ExecSpec struct {
-	Name    string               // definition name (empty when Def is set)
-	Def     *agentdef.Definition // dynamic definition (§4.4; must extend a loaded def)
-	Task    string               // user task appended to the thread
-	Profile string               // call-site profile override (§3.2)
-	Thread  string               // named thread; "" = primary at top level, fresh when delegated
-	Tools   *model.FilterSpec    // call-site narrowing (§3.2)
-	Vars    map[string]any       // template vars
-	Layers  []config.Layer       // workflow-chain layers (§3.2)
+	// DefinitionCatalog pins a workflow's roles to its accepted snapshot.
+	DefinitionCatalog *bundle.Catalog
+	OnLocalCall       loop.CallObserver
+	// LocalBehavior requires a compiled chat loop with only local tools.
+	LocalBehavior bool
+	Name          string               // definition name (empty when Def is set)
+	Def           *agentdef.Definition // dynamic definition (§4.4; must extend a loaded def)
+	Task          string               // user task appended to the thread
+	Profile       string               // call-site profile override (§3.2)
+	Thread        string               // named thread; "" = primary at top level, fresh when delegated
+	Tools         *model.FilterSpec    // call-site narrowing (§3.2)
+	Vars          map[string]any       // template vars
+	Layers        []config.Layer       // workflow-chain layers (§3.2)
 	// Output, when set, is a call-site structured-output contract:
 	// this run completes as structured against this JSON Schema,
 	// replacing any loop.output the definition resolved.
@@ -93,27 +99,6 @@ func WithOutputCheck(check loop.OutputCheck, maxRetries int) RunOption {
 // the same slot are left out (agentdef.ResolveFilled).
 func WithFills(fills ...agentdef.Fill) RunOption {
 	return func(e *ExecSpec) { e.Fills = append([]agentdef.Fill(nil), fills...) }
-}
-
-// RunAgent runs one agent to completion via the implicit agent-turn (§2).
-// nameOrDef is a definition name, a agentdef.Definition, or *agentdef.Definition.
-func (s *Host) RunAgent(ctx context.Context, nameOrDef any, task string, opts ...RunOption) (Result, error) {
-	spec := ExecSpec{Task: task}
-	switch v := nameOrDef.(type) {
-	case string:
-		spec.Name = v
-	case agentdef.Definition:
-		cp := v
-		spec.Def = &cp
-	case *agentdef.Definition:
-		spec.Def = v
-	default:
-		return Result{}, fmt.Errorf("host: RunAgent wants a definition name or agentdef.Definition, got %T", nameOrDef)
-	}
-	for _, o := range opts {
-		o(&spec)
-	}
-	return s.ExecAgent(ctx, spec)
 }
 
 // runState is one run tree: config snapshot, shared budget, semaphore (§11).
@@ -356,31 +341,6 @@ func (b *runBudget) snapshot() map[string]any {
 	}
 }
 
-// ExecAgent executes one agent node. With no nodeCtx in ctx it starts a
-// new run (run.start/run.end, fresh budget/semaphore, config snapshot).
-func (s *Host) ExecAgent(ctx context.Context, spec ExecSpec) (Result, error) {
-	if s.isClosed() {
-		return Result{}, fmt.Errorf("host: closed")
-	}
-	parent, inRun := nodeCtxFrom(ctx)
-	top := !inRun
-	var run *runState
-	if top {
-		run = s.newRun(ctx)
-		parent = s.rootNodeCtx(ctx, run)
-		_ = s.emit(ctx, trace.Event{Type: "run.start", RunID: run.id,
-			Data: mustJSON(map[string]any{"workflow": "agent-turn", "agent": specName(spec)})})
-		defer func() {
-			run.end()
-			_ = s.emit(context.WithoutCancel(ctx), trace.Event{Type: "run.end", RunID: run.id,
-				Data: mustJSON(run.budget.snapshot())})
-		}()
-	} else {
-		run = parent.run
-	}
-	return s.execNode(ctx, parent, spec, top)
-}
-
 func specName(spec ExecSpec) string {
 	if spec.Name != "" {
 		return spec.Name
@@ -402,28 +362,9 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 			fmt.Errorf("host: depth cap %d exceeded", run.cfg.Limits.Depth)
 	}
 
-	// Resolve the definition (§4).
-	if s.defs == nil {
-		return Result{}, fmt.Errorf("host: no definition loader")
-	}
-	// Pick up edits to the definition layers. A failed reload keeps the
-	// previous catalogue; the trace says why.
-	if _, err := s.defs.Reload(ctx); err != nil {
-		_ = s.emit(ctx, trace.Event{Type: "agentdef.reload_failed", SessionID: s.id,
-			Data: mustJSON(map[string]any{"error": err.Error()})})
-	}
-	var resolved *agentdef.Resolved
-	var err error
-	if spec.Def != nil {
-		resolved, err = s.defs.ResolveDynamicFilled(*spec.Def, spec.Vars, spec.Fills)
-	} else {
-		resolved, err = s.defs.ResolveFilled(spec.Name, spec.Vars, spec.Fills)
-	}
+	resolved, err := s.resolveNode(ctx, spec)
 	if err != nil {
 		return Result{}, err
-	}
-	if len(spec.Output) > 0 && !json.Valid(spec.Output) {
-		return Result{}, fmt.Errorf("host: WithOutput schema is not valid JSON")
 	}
 
 	// Effective config (§3.2): run snapshot ⊕ layers ⊕ call site.
@@ -446,6 +387,9 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	view := parent.view
 	if view == nil {
 		view = s.view
+	}
+	if resolved.Behavior != nil {
+		view = NewMapView(nil, nil)
 	}
 	view = narrow(view, resolved.Tools)
 	if spec.Tools != nil {
@@ -558,6 +502,10 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 			return s.join(ctx, nc, act)
 		},
 		Skills: resolved.SkillBodies,
+	}
+	if resolved.Behavior != nil {
+		in.Behavior = resolved.Behavior.Function
+		in.OnLocalCall = spec.OnLocalCall
 	}
 	res, runErr := loop.Run(nodeCtxVal, loop.Deps{
 		Provider: s.provider, Tools: view, Trace: s.recorder,

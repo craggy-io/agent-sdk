@@ -50,6 +50,7 @@ const (
 // later. Package workflow runs Unit's top level with its built-ins, then
 // run(input).
 type Workflow struct {
+	Chat        bool
 	Name        string
 	Description string
 	Unit        *starcompile.Unit
@@ -90,7 +91,7 @@ func Compilers() []bundle.AnyCompiler {
 	return []bundle.AnyCompiler{
 		bindingCompiler(),
 		fillerCompiler(),
-		bundle.Compile(AgentKind, starcompile.Compiler(agentOptions(), compileAgent)),
+		bundle.Compile(AgentKind, agentCompiler),
 		bundle.Compile(SkillKind, compileSkill),
 		bundle.Compile(WorkflowKind, starcompile.Compiler(workflowOptions(), compileWorkflow)),
 	}
@@ -163,16 +164,16 @@ func compileSkill(_ context.Context, c bundle.Contribution) (bundle.Compiled[*Sk
 }
 
 func compileWorkflow(ctx context.Context, u *starcompile.Unit) (bundle.Compiled[*Workflow], []bundle.Diagnostic) {
-	specs, input, err := workflowDeclaration(ctx, u)
+	w, err := workflowDeclaration(ctx, u)
 	if err != nil {
 		return bundle.Compiled[*Workflow]{}, u.Diagnostics(err)
 	}
-	for _, spec := range specs {
-		if err := ValidateMapping(spec, input); err != nil {
+	for _, spec := range w.Triggers {
+		if err := ValidateMapping(spec, w.InputSchema); err != nil {
 			return bundle.Compiled[*Workflow]{}, u.Diagnostics(err)
 		}
 	}
-	return bundle.Compiled[*Workflow]{Value: &Workflow{Name: u.Contribution().Ref.ID, Description: u.Contribution().Metadata.Description, Unit: u, Triggers: specs, InputSchema: input}}, nil
+	return bundle.Compiled[*Workflow]{Value: w}, nil
 }
 
 // ParseSource compiles a runtime-supplied definition source (agents.run

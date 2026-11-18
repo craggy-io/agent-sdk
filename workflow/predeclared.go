@@ -51,5 +51,8 @@ func predeclared(e *exec) starlark.StringDict {
 	for name, value := range triggercompile.Builtins() {
 		pre[name] = value
 	}
+	if e.chat != nil {
+		return starlark.StringDict{"workflow": pre["workflow"], "schema": pre["schema"], "agent": b("agent", chatAgent)}
+	}
 	return pre
 }

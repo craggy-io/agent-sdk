@@ -27,3 +27,15 @@ Events: `Events(ctx, EventOptions)` streams durable trace events
 from a cursor plus live deltas (bounded per subscriber; slow
 subscribers disconnect with a gap marker). `SetConfig` hot-applies a
 new config to future runs.
+
+
+## Chat turns
+
+Import `github.com/craggy-io/agent-sdk/workflow` for its registration when
+integrating the host directly. `RunAgent` and `ExecAgent` execute the embedded
+`agent-turn` workflow. `RunChat` selects an installed workflow declared with
+`workflow(chat=True, ...)`. Each role gets its own persistent thread under the
+caller's chat thread key. An interactive turn can continue after host restart
+by sending another message to the same chat. Standalone workflow replay of an
+interactive turn is refused because its caller-supplied callbacks belong to the
+original chat.

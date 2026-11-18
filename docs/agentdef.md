@@ -1,6 +1,6 @@
 # agentdef
 
-Starlark agent definitions, skills and workflows, loaded as bundles by
+YAML and Starlark agent definitions, skills and workflows, loaded as bundles by
 foundation-kit's `bundle` package and compiled by script-services'
 shared compiler (`starcompile`).
 
@@ -160,3 +160,12 @@ of every other filler of the same slot are added to the filter's
 `exclude`. `Resolved.Filled` records what was filled, and
 `Provenance["slot.<slot>"]` the filler. `Resolve` is `ResolveFilled`
 with none.
+
+## Workflow-owned agents
+
+A chat bundle declares its workflow, agents and skills as named contributions.
+A YAML agent declares its `name`, `prompt`, `tools`, `skills` and a relative
+`loop` file. A child agent can inherit the loop and skills using `extends`.
+Declare a bundle dependency when the parent belongs to a different bundle.
+The manifest locates each skill at `skills/<name>/SKILL.md`. The loop file and
+prompt files are support files relative to their agent YAML.

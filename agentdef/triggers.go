@@ -59,7 +59,7 @@ func ValidateBindings(cat *bundle.Catalog) []bundle.Diagnostic {
 
 // workflowDeclaration evaluates only declarations. Calling runtime operations
 // at file scope is rejected; run(input) is never called by the compiler.
-func workflowDeclaration(ctx context.Context, u *starcompile.Unit) ([]trigger.Spec, json.RawMessage, error) {
+func workflowDeclaration(ctx context.Context, u *starcompile.Unit) (*Workflow, error) {
 	pre := triggercompile.Builtins()
 	for _, name := range workflowBuiltins {
 		if _, ok := pre[name]; ok {
@@ -70,16 +70,15 @@ func workflowDeclaration(ctx context.Context, u *starcompile.Unit) ([]trigger.Sp
 		})
 	}
 	pre["schema"] = schema.Module()
-	var specs []trigger.Spec
-	var inputSchema json.RawMessage
+	w := &Workflow{Name: u.Contribution().Ref.ID, Description: u.Contribution().Metadata.Description, Unit: u}
 	pre["workflow"] = starlark.NewBuiltin("workflow", func(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		var desc string
 		var input, agents, profiles, limits, triggers starlark.Value
-		if err := starlark.UnpackArgs("workflow", args, kwargs, "description?", &desc, "input?", &input, "agents?", &agents, "profiles?", &profiles, "limits?", &limits, "triggers?", &triggers); err != nil {
+		if err := starlark.UnpackArgs("workflow", args, kwargs, "description?", &desc, "input?", &input, "agents?", &agents, "profiles?", &profiles, "limits?", &limits, "triggers?", &triggers, "chat?", &w.Chat); err != nil {
 			return nil, err
 		}
 		var err error
-		specs, err = triggercompile.List(triggers)
+		w.Triggers, err = triggercompile.List(triggers)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +87,7 @@ func workflowDeclaration(ctx context.Context, u *starcompile.Unit) ([]trigger.Sp
 			if err != nil {
 				return nil, err
 			}
-			inputSchema, err = json.Marshal(s)
+			w.InputSchema, err = json.Marshal(s)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +95,7 @@ func workflowDeclaration(ctx context.Context, u *starcompile.Unit) ([]trigger.Sp
 		return starlark.None, nil
 	})
 	_, err := u.Exec(ctx, starcompile.ExecOptions{Predeclared: pre, ModulePredeclared: pre})
-	return specs, inputSchema, err
+	return w, err
 }
 
 // ValidateMapping checks required and unknown workflow input names before

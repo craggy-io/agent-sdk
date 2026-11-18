@@ -1,6 +1,4 @@
-# agent-turn: the implicit workflow behind a single RunAgent. Runs one
-# agent on one message. Used explicitly when a host wants the
-# single-agent turn journaled as a workflow.
+# Execute one ordinary chat turn on the selected agent.
 WORKFLOW = workflow(
     description = "Run one agent on one message.",
     input = {

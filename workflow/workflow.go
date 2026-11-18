@@ -30,6 +30,7 @@ import (
 	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
+	"github.com/craggy-io/agent-sdk/internal/flowbridge"
 	"github.com/craggy-io/agent-sdk/internal/jschema"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/agent-sdk/trace"
@@ -70,6 +71,7 @@ type Options struct {
 	// Limits bounds Starlark execution (steps and wall clock). The
 	// zero value takes script.DefaultLimits — never unbounded.
 	Limits script.Limits
+	chat   *chatTurn
 }
 
 // Result is one workflow execution outcome.
@@ -82,12 +84,15 @@ type Result struct {
 	Pending *PendingInput `json:"pending,omitempty"`
 }
 
-func init() { host.WorkflowRunner = Run }
+func init() { Register() }
 
 // Register (re)installs the workflow engine as host.WorkflowRunner.
 // The package does this in init; Register is for hosts that blank-import
 // conditionally or replaced the hook.
-func Register() { host.WorkflowRunner = Run }
+func Register() {
+	host.WorkflowRunner = Run
+	host.RegisterChatEngine(flowbridge.Engine{}, runChat)
+}
 
 // Run executes a workflow by catalogued name (defs loader), by source
 // text (anything containing a newline or "WORKFLOW"), and returns its
@@ -133,9 +138,8 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 	if err != nil {
 		return Result{Status: StatusResumeIncompatible, RunID: runID}, err
 	}
-	if pin.RuntimeVersion != RuntimeVersion {
-		return Result{Status: StatusResumeIncompatible, RunID: runID},
-			fmt.Errorf("workflow: resume %s: runtime version %q, want %q", runID, pin.RuntimeVersion, RuntimeVersion)
+	if err := pin.resumable(); err != nil {
+		return Result{Status: StatusResumeIncompatible, RunID: runID}, err
 	}
 	srcBlob, err := s.Sink().GetBlob(ctx, pin.SourceBlob)
 	if err != nil {
@@ -145,20 +149,10 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 		return Result{Status: StatusResumeIncompatible, RunID: runID},
 			fmt.Errorf("workflow: resume %s: source hash mismatch", runID)
 	}
-	// A catalogued workflow whose file changed since the pin stops the
-	// resume instead of silently running new code (§6.3). One that left
-	// the catalogue replays its pinned source, with nothing to load().
-	wf := &agentdef.Workflow{Name: pin.Name}
-	if pin.Name != "" && s.Defs() != nil {
-		if cur, ok := s.Defs().Workflow(pin.Name); ok {
-			if hashBytes([]byte(cur.Source())) != pin.SourceHash {
-				return Result{Status: StatusResumeIncompatible, RunID: runID},
-					fmt.Errorf("workflow: resume %s: workflow %q changed since the run started", runID, pin.Name)
-			}
-			wf = cur
-		}
+	wf, err := pin.workflow(ctx, s, runID)
+	if err != nil {
+		return Result{Status: StatusResumeIncompatible, RunID: runID}, err
 	}
-	wf.Description = pin.Description
 	if got := configHash(s); got != pin.ConfigHash {
 		return Result{Status: StatusResumeIncompatible, RunID: runID},
 			fmt.Errorf("workflow: resume %s: session config changed since the run started", runID)
@@ -173,9 +167,16 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 			return Result{Status: StatusResumeIncompatible, RunID: runID}, fmt.Errorf("workflow: resume %s: input: %w", runID, err)
 		}
 	}
+	opts.RunID, opts.Resume = runID, true
+	if pin.ChatCatalog != "" {
+		opts.chat, err = installedChat(s, wf, runID, pin.ChatCatalog)
+		if err != nil {
+			return Result{Status: StatusResumeIncompatible, RunID: runID}, err
+		}
+	}
 	// Restore threads/mailbox/handles so recorded handles exist again.
 	_ = s.Rebuild(ctx, "")
-	return execute(ctx, s, wf, string(srcBlob), input, Options{RunID: runID, Resume: true, View: opts.View})
+	return execute(ctx, s, wf, string(srcBlob), input, opts)
 }
 
 // resolveSource returns the catalogued workflow nameOrSource names (after
@@ -212,6 +213,8 @@ func hash16(v any) string {
 
 // exec is one workflow execution (live or replaying).
 type exec struct {
+	chat    *chatTurn
+	invoke  host.NodeRunner
 	ctx     context.Context
 	s       *host.Host
 	wf      *agentdef.Workflow // catalogued name ("" for ad-hoc source) and script (nil Unit when not catalogued)
@@ -264,40 +267,39 @@ func (e *exec) noteUsage(u model.Usage) {
 }
 
 func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source string, input map[string]any, opts Options) (Result, error) {
-	e := &exec{ctx: ctx, s: s, wf: wf, source: source, resume: opts.Resume,
+	var out Result
+	err := s.WithWorkflow(flowbridge.Engine{}, ctx, wf.Name, opts.RunID, func(scoped context.Context, invoke host.NodeRunner) error {
+		var err error
+		if opts.RunID == "" {
+			opts.RunID, _ = host.RunIDFromContext(scoped)
+		}
+		// Keep the caller's tool view and identity for the workflow itself.
+		// invoke binds only its agent nodes to the shared run.
+		out, err = executeScoped(ctx, s, wf, source, input, opts, invoke)
+		return err
+	})
+	return out, err
+}
+
+func executeScoped(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source string, input map[string]any, opts Options, invoke host.NodeRunner) (Result, error) {
+	e := &exec{ctx: ctx, s: s, wf: wf, source: source, resume: opts.Resume, chat: opts.chat, invoke: invoke,
 		lim: opts.Limits, runID: opts.RunID, nodeID: model.NewID()}
 	if e.runID == "" {
-		// Prefer the enclosing session run so trace tree queries join.
+		e.runID = model.NewID()
 		if rid, ok := host.RunIDFromContext(ctx); ok && opts.NodePath == "" {
 			e.runID = rid
-		} else {
-			e.runID = model.NewID()
 		}
 	}
-	// On resume the journal scope stays the original run even when the
-	// enclosing session run differs.
-	if opts.Resume {
-		e.runID = opts.RunID
-	}
-	e.path = opts.NodePath
-	if e.path == "" {
-		e.path = wf.Name
-		if e.path == "" {
-			e.path = "wf:" + hashBytes([]byte(source))[:8]
+	if e.chat == nil && wf.Chat {
+		var err error
+		e.chat, err = installedChat(s, wf, e.runID, "")
+		if err != nil {
+			return Result{Status: StatusResumeIncompatible, RunID: e.runID}, err
 		}
 	}
-	e.view = s.View()
-	if opts.View != nil {
-		e.view = opts.View
-	}
-	if v, ok := host.ViewFromContext(ctx); ok {
-		e.view = v // rule 4: an agent-written workflow sees the agent's view
-	}
+	e.configureScope(ctx, opts)
 
-	var rec *trace.Recorder
-	if s.Recorder() != nil {
-		rec = s.Recorder()
-	}
+	rec := s.Recorder()
 	e.journal = newJournal(rec, s.Sink(), e.runID)
 
 	if opts.Resume {
@@ -312,6 +314,27 @@ func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source st
 		}
 	}
 
+	return e.runInput(ctx, input, opts)
+}
+
+func (e *exec) configureScope(ctx context.Context, opts Options) {
+	e.path = opts.NodePath
+	if e.path == "" {
+		e.path = e.wf.Name
+		if e.path == "" {
+			e.path = "wf:" + hashBytes([]byte(e.source))[:8]
+		}
+	}
+	e.view = e.s.View()
+	if opts.View != nil {
+		e.view = opts.View
+	}
+	if v, ok := host.ViewFromContext(ctx); ok {
+		e.view = v // rule 4: an agent-written workflow sees the agent's view
+	}
+}
+
+func (e *exec) runInput(ctx context.Context, input map[string]any, opts Options) (Result, error) {
 	thread := script.NewThread("workflow:"+e.path, e.limits(), nil)
 	thread.SetLocal("wf", e)
 	thread.SetLocal("ctx", ctx)
@@ -364,6 +387,8 @@ func execute(ctx context.Context, s *host.Host, wf *agentdef.Workflow, source st
 
 // pin is the wf.start payload (§6.3 replay pins).
 type pin struct {
+	ChatCatalog    string     `json:"chat_catalog,omitempty"`
+	Chat           bool       `json:"chat,omitempty"`
 	Name           string     `json:"name,omitempty"`
 	Description    string     `json:"description,omitempty"`
 	SourceHash     string     `json:"source_hash"`
@@ -386,6 +411,12 @@ func (e *exec) pinStart(ctx context.Context, input map[string]any) error {
 	}
 	p := pin{Name: e.wf.Name, Description: e.wf.Description, SourceHash: hashBytes([]byte(e.source)), SourceBlob: srcHash,
 		InputBlob: inHash, ConfigHash: configHash(e.s), RuntimeVersion: RuntimeVersion, Path: e.path}
+	if e.chat != nil {
+		p.Chat = e.chat.interactive
+		if !p.Chat {
+			p.ChatCatalog = e.chat.catalog.Digest()
+		}
+	}
 	b, _ := json.Marshal(p)
 	return e.journal.rec.Emit(ctx, trace.Event{Type: "wf.start", SessionID: e.s.ID(),
 		RunID: e.runID, NodeID: e.nodeID, Data: b})
@@ -517,4 +548,38 @@ type recoveryError struct{ op string }
 
 func (e *recoveryError) Error() string {
 	return "blocked: recovery_required: operation " + e.op + " has an unknown outcome"
+}
+
+func (pin pin) workflow(ctx context.Context, s *host.Host, runID string) (*agentdef.Workflow, error) {
+	if pin.ChatCatalog != "" && s.Defs() != nil {
+		if _, err := s.Defs().Reload(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// A catalogued workflow whose file changed since the pin stops the
+	// resume instead of silently running new code (§6.3). One that left
+	// the catalogue replays its pinned source, with nothing to load().
+	wf := &agentdef.Workflow{Name: pin.Name}
+	if pin.Name != "" && s.Defs() != nil {
+		if cur, ok := s.Defs().Workflow(pin.Name); ok {
+			if hashBytes([]byte(cur.Source())) != pin.SourceHash {
+				return nil,
+					fmt.Errorf("workflow: resume %s: workflow %q changed since the run started", runID, pin.Name)
+			}
+			snapshot := *cur
+			wf = &snapshot
+		}
+	}
+	wf.Description = pin.Description
+	return wf, nil
+}
+
+func (p pin) resumable() error {
+	if p.Chat {
+		return fmt.Errorf("workflow: a chat turn cannot resume outside its original chat")
+	}
+	if p.RuntimeVersion != RuntimeVersion {
+		return fmt.Errorf("workflow: resume runtime version %q, want %q", p.RuntimeVersion, RuntimeVersion)
+	}
+	return nil
 }

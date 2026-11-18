@@ -15,11 +15,13 @@ import (
 )
 
 type runner struct {
-	deps   Deps
-	in     Input
-	policy Policy
-	thread *transcript.Transcript
-	budget Budget
+	pending      *pendingCalls
+	intermediate bool
+	deps         Deps
+	in           Input
+	policy       Policy
+	thread       *transcript.Transcript
+	budget       Budget
 
 	window     int     // served model's context window (0 = unknown)
 	inputPrice float64 // per-token input price (0 = unknown)
@@ -63,6 +65,11 @@ func Run(ctx context.Context, deps Deps, in Input) (Result, error) {
 	if deps.Provider == nil {
 		return Result{}, fmt.Errorf("loop: nil Provider")
 	}
+	if in.Behavior != nil {
+		// Authored chat loops can read their pinned skills. They have no
+		// registry, peer, or workflow authority.
+		deps.Tools, deps.Delegate = nil, nil
+	}
 	r := &runner{
 		deps: deps, in: in, policy: in.Policy.withDefaults(),
 		thread: in.Thread, budget: deps.Budget,
@@ -92,61 +99,7 @@ func Run(ctx context.Context, deps Deps, in Input) (Result, error) {
 		"def": r.in.DefName, "profile": r.in.ProfileName, "model": r.in.Profile.Model,
 	})
 
-	status := ""
-	var runErr error
-	step := 0
-loop:
-	for {
-		// PRECHECK (§5.2): budget / cancel / max_steps before any work.
-		if ctx.Err() != nil {
-			status = StatusCancelled
-			r.appendAbortedNotice()
-			break
-		}
-		if err := r.budget.DeadlineOK(); err != nil {
-			status = statusBudget(budgetWhich(err, "wall_clock"))
-			break
-		}
-		if step >= r.policy.MaxSteps {
-			status = statusBudget("steps")
-			break
-		}
-		r.deliverPending()
-		if r.policy.Hooks.BeforeStep != nil {
-			items, err := r.policy.Hooks.BeforeStep(ctx, r.stepView(step))
-			r.appendNotices(items)
-			if err != nil {
-				status = statusFailed("hook")
-				break
-			}
-		}
-		r.maybeRunwayNotice(ctx, step)
-		// POSTCHECK of the previous step: compaction trigger (§5.6).
-		if st, err := r.maybeCompact(ctx); err != nil {
-			runErr = err
-			break loop
-		} else if st != "" {
-			status = st
-			break
-		}
-		step++
-		out, err := r.step(ctx, step)
-		if err != nil {
-			runErr = err
-			break
-		}
-		switch out.action {
-		case actContinue:
-			continue
-		case actStop:
-			status = out.status
-			if status == StatusCancelled {
-				// The step's deferred settle has run by now.
-				r.appendAbortedNotice()
-			}
-			break loop
-		}
-	}
+	status, step, runErr := r.drive(ctx)
 	if runErr != nil {
 		return Result{}, runErr
 	}

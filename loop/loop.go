@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.starlark.net/starlark"
+
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/agent-sdk/trace"
@@ -195,6 +197,8 @@ func (p Policy) withDefaults() Policy {
 
 // Input is one loop invocation (rule 6: every entry point builds this).
 type Input struct {
+	OnLocalCall                       CallObserver
+	Behavior                          *starlark.Function
 	NodeID, RunID, SessionID, DefName string
 	System                            string
 	Thread                            *transcript.Transcript

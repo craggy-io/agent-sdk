@@ -10,8 +10,7 @@ say how each package keeps them.
 ## 1. Shape
 
 A Go library, not a server. One host owns config, provider, tool view,
-definitions and trace. Agents and workflows are Starlark definitions;
-the ReAct loop, budgets, journaling and tool dispatch are Go. Every
+definitions and trace. Workflows and agent loops execute Starlark. Agent definitions can declare an executable loop in YAML. Go enforces budgets, journals operations and dispatches tool calls. Every
 effect a script has goes through a host built-in or a capability.
 
 ## 2. Runtime (`host`)

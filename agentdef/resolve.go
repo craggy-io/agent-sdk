@@ -28,7 +28,11 @@ func (l *Loader) Resolve(name string, vars map[string]any) (*Resolved, error) {
 // the tools of the other fillers of the same slot are left out. A fill
 // for a slot the agent doesn't seek is allowed: the host decides.
 func (l *Loader) ResolveFilled(name string, vars map[string]any, fills []Fill) (*Resolved, error) {
-	cat := l.Catalog()
+	return ResolveIn(l.Catalog(), name, vars, fills)
+}
+
+// ResolveIn resolves against an already accepted, immutable catalog.
+func ResolveIn(cat *bundle.Catalog, name string, vars map[string]any, fills []Fill) (*Resolved, error) {
 	d, ok := lookup(cat, AgentKind, name)
 	if !ok {
 		return nil, fmt.Errorf("agentdef: unknown agent %q", name)
@@ -246,10 +250,8 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any,
 			r.Seeks = mergeSeek(r.Seeks, seek)
 			r.Provenance["seeks."+seek.Slot] = d.Name
 		}
-		// Loop: field by field; output replaced.
-		mergeLoop(&r.Loop, d.Loop, d.Name, r.Provenance)
-		if d.Loop.Output != nil {
-			outputRef, outputFrom = *d.Loop.Output, d.Name
+		if err := resolveLoop(r, d, &outputRef, &outputFrom); err != nil {
+			return nil, err
 		}
 		// Prompt fragments.
 		var err error
@@ -301,6 +303,7 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any,
 		}
 	}
 	r.SystemPrompt = strings.Join(parts, "\n\n")
+	r.promptWithoutSkills = r.SystemPrompt
 
 	if len(r.Skills) > 0 {
 		var list strings.Builder
@@ -430,4 +433,26 @@ func applyPromptEntries(frags []fragment, d *Definition) ([]fragment, error) {
 		}
 	}
 	return frags, nil
+}
+
+func resolveLoop(r *Resolved, d *Definition, outputRef, outputFrom *string) error {
+	// Loop: field by field; output replaced.
+	mergeLoop(&r.Loop, d.Loop, d.Name, r.Provenance)
+	if d.Behavior != nil {
+		r.Behavior = d.Behavior
+		r.Provenance["behavior"] = d.Name
+	}
+	if path.Ext(d.Source) == ".yaml" && r.Behavior == nil {
+		return fmt.Errorf("agentdef: %s has no inherited executable loop", d.Name)
+	}
+	if d.Loop.Output != nil {
+		*outputRef, *outputFrom = *d.Loop.Output, d.Name
+	}
+	return nil
+}
+
+// WithoutSkills removes the skill prompt and bodies from this run's projection.
+func (r *Resolved) WithoutSkills() {
+	r.SystemPrompt = r.promptWithoutSkills
+	r.Skills, r.SkillBodies = nil, nil
 }

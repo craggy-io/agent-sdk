@@ -81,13 +81,14 @@ func (v *manifestValue) Hash() (uint32, error) { return 0, fmt.Errorf("unhashabl
 // profiles, limits) at file scope (§6.1).
 func workflowBuiltin(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var desc string
+	var chat bool
 	var inputV, agentsV, profilesV, limitsV, triggersV starlark.Value
 	if err := starlark.UnpackArgs("workflow", args, kwargs,
 		"description?", &desc, "input?", &inputV, "agents?", &agentsV,
-		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV); err != nil {
+		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV, "chat?", &chat); err != nil {
 		return nil, err
 	}
-	if _, err := triggercompile.List(triggersV); err != nil {
+	if err := validateDispatch(thread, chat, triggersV); err != nil {
 		return nil, err
 	}
 	m := &manifest{Description: desc}
@@ -208,3 +209,14 @@ func (n *nsValue) Attr(name string) (starlark.Value, error) {
 }
 
 var _ starlark.HasAttrs = (*nsValue)(nil)
+
+func validateDispatch(thread *starlark.Thread, chat bool, triggers starlark.Value) error {
+	if chat {
+		e, _ := thread.Local("wf").(*exec)
+		if e == nil || e.chat == nil {
+			return fmt.Errorf("chat workflows must run from an installed bundle")
+		}
+	}
+	_, err := triggercompile.List(triggers)
+	return err
+}

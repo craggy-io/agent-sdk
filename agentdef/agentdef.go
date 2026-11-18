@@ -1,4 +1,4 @@
-// Package agentdef loads Starlark agent definitions, skills and
+// Package agentdef loads YAML and Starlark agent definitions, skills and
 // workflows, and resolves inheritance: single-parent extends, prompt
 // fragment append/replace/remove, tool-filter union (max_effect only
 // ever tightens), template rendering with missingkey=error, and the
@@ -78,6 +78,7 @@ type LoopSpec struct {
 // Definition is one agent definition: from a Starlark file, from Go, or
 // dynamic. It names a profile, never a model.
 type Definition struct {
+	Behavior    *Behavior        `json:"behavior,omitempty"`
 	Name        string           `json:"name"`
 	Extends     string           `json:"extends,omitempty"`
 	Description string           `json:"description,omitempty"`
@@ -109,6 +110,7 @@ type Skill struct {
 // Resolved is the immutable output of inheritance resolution, with
 // Provenance recording which ancestor supplied each field.
 type Resolved struct {
+	Behavior    *Behavior        `json:"behavior,omitempty"`
 	Name        string           `json:"name"`
 	Extends     string           `json:"extends,omitempty"`
 	Description string           `json:"description,omitempty"`
@@ -131,7 +133,8 @@ type Resolved struct {
 
 	// SystemPrompt is the single rendered system message: fragments
 	// joined with a blank line, skills catalogue last.
-	SystemPrompt string `json:"system_prompt"`
+	SystemPrompt        string `json:"system_prompt"`
+	promptWithoutSkills string
 	// OutputSchema is the resolved loop.output schema, if any.
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	// Fragments are the prompt fragment names in order.

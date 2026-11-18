@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/craggy-io/agent-sdk/agentdef"
+	_ "github.com/craggy-io/agent-sdk/workflow"
 )
 
 // testAgents is the shared agent catalogue used by host_test tests, one

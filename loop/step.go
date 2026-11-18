@@ -17,6 +17,7 @@ import (
 const (
 	actContinue = iota
 	actStop
+	actCalls
 )
 
 type stepOutcome struct {
@@ -33,7 +34,6 @@ func cont() stepOutcome              { return stepOutcome{action: actContinue} }
 func (r *runner) step(ctx context.Context, stepNum int) (out stepOutcome, err error) {
 	stepID := model.NewID()
 	var (
-		assistant *model.Item // stored assistant item, once appended
 		settled   = map[string]bool{}
 		starts    = newCallStarts()
 		settleWhy = settlement{
@@ -41,95 +41,23 @@ func (r *runner) step(ctx context.Context, stepNum int) (out stepOutcome, err er
 			text:   model.Fail(model.CodeCancelled, "aborted", "aborted before dispatch; side effects may be partial").Text,
 		}
 	)
+	d := &dispatch{r: r, ctx: ctx, stepID: stepID, stepNum: stepNum, settled: settled, starts: starts}
+	settle := func() error {
+		d.settleRemaining(settleWhy)
+		return r.getTraceErr()
+	}
 	defer func() {
-		if assistant == nil {
+		if r.pending != nil {
 			return
 		}
-		bg := context.WithoutCancel(ctx)
-		for _, c := range assistant.Calls {
-			if settled[c.ID] {
-				continue
-			}
-			it := model.Item{Kind: model.KindToolResult, CallID: c.ID,
-				IsError: true, Settled: settleWhy.reason, Text: settleWhy.text}
-			// Settle-once (rule 2) outranks trace fatality here: the
-			// result still enters the transcript, but a failed
-			// call.end commit makes the step return an error (rule 5).
-			_ = r.startCall(bg, stepID, starts, c)
-			_ = r.fatalEmit(bg, "call.end", stepID, CallEndData(c, model.ToolResult{Text: it.Text, IsError: true}, it.Settled))
-			r.thread.Append(it)
-			settled[c.ID] = true
-		}
-		if terr := r.getTraceErr(); terr != nil && err == nil {
+		if terr := settle(); terr != nil && err == nil {
 			out, err = stepOutcome{}, terr
 		}
 	}()
 
-	charged := false
-	overflowUsed := false
-	retries := 0
 	var resp model.Response
-	for {
-		// PROJECT: pure normalisation of the transcript (§5.4).
-		projected, repairs := r.project(ctx)
-		projected = r.withCatalogue(r.withSystem(projected))
-		req := r.buildRequest(projected)
-		if !charged {
-			// Budgets are charged before the work (§5.7).
-			if err := r.budget.ChargeStep(r.estimateTokens(projected), r.inputPrice); err != nil {
-				return stop(statusBudget(budgetWhich(err, "steps"))), nil
-			}
-			charged = true
-		}
-		// Write before send (rule 5): the request is committed first.
-		if r.deps.Trace != nil {
-			safe, safeRepairs := traceSafe(projected)
-			meta := trace.Event{SessionID: r.in.SessionID, RunID: r.in.RunID, NodeID: r.in.NodeID, StepID: stepID}
-			if err := r.deps.Trace.RecordStepRequest(ctx, meta, safe, trace.ParamsOf(req), append(repairs, safeRepairs...)); err != nil {
-				return stepOutcome{}, fmt.Errorf("loop: commit step.request: %w", err)
-			}
-		}
-		resp, err = safeSample(ctx, r.deps.Provider, req, r.in.OnDelta)
-		if err == nil {
-			break
-		}
-		_ = r.emit(ctx, "step.attempt_failed", stepID, attemptFailedData(err, retries, req.Model))
-		r.chargeFailedAttempt(err)
-		if ctxErr := ctx.Err(); ctxErr != nil || errors.Is(err, context.Canceled) {
-			return stop(StatusCancelled), nil
-		}
-		var merr *model.Error
-		isModelErr := errors.As(err, &merr)
-		// One overflow recovery per step: compact, then retry (§5.3, §5.6).
-		if isModelErr && merr.ContextExceeded && !overflowUsed {
-			overflowUsed = true
-			made, st, cerr := r.compact(ctx)
-			if cerr != nil {
-				return stepOutcome{}, cerr
-			}
-			if st != "" {
-				return stop(st), nil
-			}
-			if !made {
-				return stop(StatusContextUnfit), nil
-			}
-			continue
-		}
-		// Transient retry: 3 per step, run budget via Budget (§5.3).
-		// Nothing has been dispatched, so a retry repeats no side effect.
-		if isTransient(err) && retries < 3 && r.budget.RetriesLeft() {
-			r.budget.NoteRetry()
-			retries++
-			if werr := waitRetry(ctx, err, retries); werr != nil {
-				return stop(StatusCancelled), nil
-			}
-			continue
-		}
-		code := "provider_error"
-		if isModelErr && merr.Code != "" {
-			code = merr.Code
-		}
-		return stop(statusFailed(code)), nil
+	if out, err := r.sample(ctx, stepID, &resp); err != nil || out.action == actStop {
+		return out, err
 	}
 
 	// Commit the response before any tool runs (rule 5).
@@ -140,7 +68,7 @@ func (r *runner) step(ctx context.Context, stepNum int) (out stepOutcome, err er
 	}
 	sanitiseCallIDs(&item, r.in.NodeID, r.thread.Len(), r.thread.Items())
 	stored := r.thread.Append(item)[0]
-	assistant = &stored
+	d.assistant = stored
 	r.budget.ChargeUSD(resp.Usage.CostUSD)
 	r.usage.Add(resp.Usage)
 	if resp.Usage.PromptTokens > 0 {
@@ -166,13 +94,106 @@ func (r *runner) step(ctx context.Context, stepNum int) (out stepOutcome, err er
 	}
 
 	// CLASSIFY on (finish, calls, text) — §5.2 table.
-	d := &dispatch{r: r, ctx: ctx, stepID: stepID, stepNum: stepNum,
-		assistant: stored, settled: settled, starts: starts}
+	d.observeCalls()
 	outcome := r.classify(ctx, d, stored, &settleWhy)
 	if terr := r.getTraceErr(); terr != nil {
 		return stepOutcome{}, terr
 	}
+	if outcome.action == actCalls {
+		r.pending = &pendingCalls{dispatch: d, why: &settleWhy, settle: settle}
+	}
 	return outcome, nil
+}
+
+func (r *runner) sample(ctx context.Context, stepID string, resp *model.Response) (stepOutcome, error) {
+	charged := false
+	overflowUsed := false
+	retries := 0
+	for {
+		req, status, err := r.sampleRequest(ctx, stepID, !charged)
+		if err != nil || status != "" {
+			return stop(status), err
+		}
+		charged = true
+		*resp, err = safeSample(ctx, r.deps.Provider, req, r.in.OnDelta)
+		if err == nil {
+			break
+		}
+		_ = r.emit(ctx, "step.attempt_failed", stepID, attemptFailedData(err, retries, req.Model))
+		r.chargeFailedAttempt(err)
+		if sampleCancelled(ctx, err) {
+			return stop(StatusCancelled), nil
+		}
+		var merr *model.Error
+		isModelErr := errors.As(err, &merr)
+		if isModelErr && merr.ContextExceeded && !overflowUsed {
+			overflowUsed = true
+			if out, err := r.recoverOverflow(ctx); err != nil || out.action == actStop {
+				return out, err
+			}
+			continue
+		}
+		// Transient retry: 3 per step, run budget via Budget (§5.3).
+		// Nothing has been dispatched, so a retry repeats no side effect.
+		if r.canRetrySample(err, retries) {
+			r.budget.NoteRetry()
+			retries++
+			if werr := waitRetry(ctx, err, retries); werr != nil {
+				return stop(StatusCancelled), nil
+			}
+			continue
+		}
+		code := "provider_error"
+		if isModelErr && merr.Code != "" {
+			code = merr.Code
+		}
+		return stop(statusFailed(code)), nil
+	}
+	return cont(), nil
+}
+
+func sampleCancelled(ctx context.Context, err error) bool {
+	return ctx.Err() != nil || errors.Is(err, context.Canceled)
+}
+
+func (r *runner) canRetrySample(err error, retries int) bool {
+	return isTransient(err) && retries < 3 && r.budget.RetriesLeft()
+}
+
+func (r *runner) sampleRequest(ctx context.Context, stepID string, charge bool) (model.Request, string, error) {
+	// PROJECT: pure normalisation of the transcript (§5.4).
+	projected, repairs := r.project(ctx)
+	projected = r.withCatalogue(r.withSystem(projected))
+	req := r.buildRequest(projected)
+	if charge {
+		// Budgets are charged before the work (§5.7).
+		if err := r.budget.ChargeStep(r.estimateTokens(projected), r.inputPrice); err != nil {
+			return model.Request{}, statusBudget(budgetWhich(err, "steps")), nil
+		}
+	}
+	// Write before send (rule 5): the request is committed first.
+	if r.deps.Trace != nil {
+		safe, safeRepairs := traceSafe(projected)
+		meta := trace.Event{SessionID: r.in.SessionID, RunID: r.in.RunID, NodeID: r.in.NodeID, StepID: stepID}
+		if err := r.deps.Trace.RecordStepRequest(ctx, meta, safe, trace.ParamsOf(req), append(repairs, safeRepairs...)); err != nil {
+			return model.Request{}, "", fmt.Errorf("loop: commit step.request: %w", err)
+		}
+	}
+	return req, "", nil
+}
+
+func (r *runner) recoverOverflow(ctx context.Context) (stepOutcome, error) {
+	made, status, err := r.compact(ctx)
+	if err != nil {
+		return stepOutcome{}, err
+	}
+	if status != "" {
+		return stop(status), nil
+	}
+	if !made {
+		return stop(StatusContextUnfit), nil
+	}
+	return cont(), nil
 }
 
 func (r *runner) classify(ctx context.Context, d *dispatch, item model.Item, settleWhy *settlement) stepOutcome {
@@ -210,7 +231,7 @@ func (r *runner) classify(ctx context.Context, d *dispatch, item model.Item, set
 
 	case model.FinishMissing, "":
 		if hasCalls && allArgsParse(item.Calls) {
-			return r.dispatchStep(d, settleWhy)
+			return stepOutcome{action: actCalls}
 		}
 		*settleWhy = settlement{reason: model.SettleNotDispatched,
 			text: model.Fail(model.CodeInvalid, "not_dispatched", "not dispatched: the response had no finish reason and the call arguments do not parse").Text}
@@ -218,7 +239,7 @@ func (r *runner) classify(ctx context.Context, d *dispatch, item model.Item, set
 
 	default: // stop, tool_calls, and anything else with content
 		if hasCalls {
-			return r.dispatchStep(d, settleWhy)
+			return stepOutcome{action: actCalls}
 		}
 		if text == "" {
 			// An empty response is never success (§5.2).
@@ -229,17 +250,24 @@ func (r *runner) classify(ctx context.Context, d *dispatch, item model.Item, set
 			r.appendNotice("continue", "your previous response was empty. Continue, or finish with a final answer.")
 			return cont()
 		}
-		// Text final.
-		if r.policy.Completion == "structured" {
-			if !r.structReminded {
-				r.structReminded = true
-				r.appendNotice("completion", "this agent must finish by calling complete(summary, output) — plain text does not complete the task.")
-				return cont()
-			}
-			return stop(statusFailed("no_completion"))
-		}
-		return r.finishDone(ctx)
+		return r.finishText(ctx)
 	}
+}
+
+func (r *runner) finishText(ctx context.Context) stepOutcome {
+	if r.intermediate {
+		return stop("intermediate")
+	}
+	// Text final.
+	if r.policy.Completion == "structured" {
+		if !r.structReminded {
+			r.structReminded = true
+			r.appendNotice("completion", "this agent must finish by calling complete(summary, output) — plain text does not complete the task.")
+			return cont()
+		}
+		return stop(statusFailed("no_completion"))
+	}
+	return r.finishDone(ctx)
 }
 
 // finishDone handles a would-be `done` stop: queued follow-ups continue the

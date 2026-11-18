@@ -5,11 +5,10 @@
 
 # Agent SDK
 
-A Go library for building LLM agents and multi-agent workflows whose
-definitions are Starlark scripts. The Go host owns the ReAct loop, budgets,
-traces and tools; Starlark scripts define agents and compose them into
-workflows. Adding a capability to the host registry makes it callable from
-new scripts with no host changes.
+A Go library for agents and multi-agent workflows. Starlark workflows orchestrate
+chat turns. Agents select an executable Starlark loop in YAML or inherit one
+through their definition chain. The Go host owns the model transport, tool
+dispatch, budgets, threads and trace.
 
 The module is `github.com/craggy-io/agent-sdk`:
 
@@ -20,10 +19,7 @@ go install github.com/craggy-io/agent-sdk/cmd/craggy-agent@latest   # optional t
 
 ## Features
 
-- **One ReAct loop:** [project, sample, classify, dispatch, settle](docs/loop.md)
-  in Go, exposed to scripts as built-ins; provider-neutral behind
-  [`model.Provider`](docs/model.md), with an [OpenRouter](docs/openrouter.md)
-  implementation and [scripted test providers](docs/agenttest.md) included.
+- **Executable agent loops** select when to sample the model, execute its requested calls and finish a turn. Go enforces call ordering, settlement and limits. [Loop contract](docs/loop.md)
 - **Agents and workflows in Starlark:** [definitions](docs/agentdef.md) run by
   [script-services](https://github.com/craggy-io/script-services); built-in
   definitions [ship embedded](docs/defs.md), and user and project definitions
@@ -57,12 +53,12 @@ go install github.com/craggy-io/agent-sdk/cmd/craggy-agent@latest   # optional t
 | --- | --- |
 | `model` | Provider seam: requests, responses, usage, deltas, tool filters |
 | `transcript` | Append-only conversation items, normalisation, invariants |
-| `loop` | The ReAct loop: sampling, tool dispatch, compaction, budgets |
+| `loop` | Starlark loop execution, sampling, tool dispatch, compaction, budgets |
 | `trace` | Append-only event sink with content-addressed blobs (`memory`, `query` subpackages; SQLite in `adapters/tracesqlite`) |
 | `config` | Profiles, limits and layered resolution as Go values |
 | `openrouter` | OpenRouter `model.Provider` implementation |
 | `agenttest` | Scripted and chaos providers for tests |
-| `agentdef` | Starlark agent definitions: load, extends chains, resolve |
+| `agentdef` | YAML and Starlark agent definitions: load, extends chains, resolve |
 | `host` | Runtime: threads, run tree, mailbox, peers, events, budgets |
 | `workflow` | Durable Starlark workflows: journal, ask gates, resume |
 | `memory` | Durable memory store exposed as capabilities |
@@ -85,6 +81,7 @@ import (
     "github.com/craggy-io/agent-sdk/host"
     "github.com/craggy-io/agent-sdk/openrouter"
     tracemem "github.com/craggy-io/agent-sdk/trace/memory"
+    _ "github.com/craggy-io/agent-sdk/workflow" // register the chat and workflow engine
     "github.com/craggy-io/capability-services/registry"
 )
 
