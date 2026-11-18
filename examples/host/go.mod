@@ -3,17 +3,17 @@ module github.com/craggy-io/agent-sdk/examples/host
 go 1.27.0
 
 require (
-	github.com/craggy-io/agent-sdk v0.1.1-0.20261107143611-d57d97eb4780
-	github.com/craggy-io/agent-sdk/adapters/configyaml v0.1.1-0.20261107143611-d57d97eb4780
-	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.1.1-0.20261107143611-d57d97eb4780
+	github.com/craggy-io/agent-sdk v0.2.0
+	github.com/craggy-io/agent-sdk/adapters/configyaml v0.2.0
+	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.2.0
 	github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044
-	github.com/craggy-io/foundation-kit v0.0.0-20261107163733-af7e17b71fd2
+	github.com/craggy-io/foundation-kit v0.0.0-20261116105501-654f585a41ed
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )
 
 require (
 	github.com/craggy-io/foundation-kit/adapters/sqlite v0.0.0-20261107163733-af7e17b71fd2 // indirect
-	github.com/craggy-io/script-services v0.1.1-0.20261107163800-8eb4b015c1aa // indirect
+	github.com/craggy-io/script-services v0.1.1-0.20261116105526-a5a6e2565939 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
