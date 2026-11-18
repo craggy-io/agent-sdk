@@ -254,7 +254,11 @@ func (e *exec) emit(typ string, data map[string]any) error {
 		return nil
 	}
 	b, _ := json.Marshal(data)
-	return e.journal.rec.Emit(e.ctx, trace.Event{
+	ctx := e.ctx
+	if e.chat != nil && typ == "wf.end" {
+		ctx = context.WithoutCancel(ctx)
+	}
+	return e.journal.rec.Emit(ctx, trace.Event{
 		Type: typ, SessionID: e.s.ID(), RunID: e.runID, NodeID: e.nodeID,
 		Data: b,
 	})

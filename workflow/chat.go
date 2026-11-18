@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/craggy-io/agent-sdk/host"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/foundation-kit/bundle"
+	"github.com/craggy-io/script-services/script"
 	"go.starlark.net/starlark"
 )
 
@@ -64,18 +66,30 @@ func runChat(ctx context.Context, h *host.Host, name string, spec host.ExecSpec,
 		input["agent"] = agent
 	}
 	out, err := executeScoped(ctx, h, wf, src, input, Options{chat: t}, invoke)
+	t.last.Usage, t.last.Steps = t.usage, t.steps
 	if t.err != nil {
-		return t.last, t.err
+		err = t.err
 	}
 	if err != nil {
+		if cancelledChat(ctx, err) {
+			t.last.Status = StatusCancelled
+			t.last.RunID, _ = host.RunIDFromContext(ctx)
+			return t.last, nil
+		}
 		return t.last, err
 	}
 	value, ok := out.Value.(map[string]any)
 	if !ok || t.calls == 0 || value["node"] != t.last.NodeID || value["status"] != t.last.Status {
 		return t.last, fmt.Errorf("chat workflow must return its last agent result")
 	}
-	t.last.Usage, t.last.Steps = t.usage, t.steps
 	return t.last, nil
+}
+
+// A caller stopping a chat is a terminal status. Preserve distinct faults
+// from the trace or provider even if cancellation happened concurrently.
+func cancelledChat(ctx context.Context, err error) bool {
+	cause := ctx.Err()
+	return cause != nil && (errors.Is(err, cause) || script.IsCancellation(err, "context done: "+cause.Error()))
 }
 
 func chatAgent(e *exec, _ *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

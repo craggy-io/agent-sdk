@@ -219,6 +219,10 @@ func (j *journal) do(ctx context.Context, e *exec, key, builtin string, args any
 		}
 		ent.Result = b
 	}
+	// A stopped chat still needs a durable result for its completed agent call.
+	if e.chat != nil {
+		ctx = context.WithoutCancel(ctx)
+	}
 	if jerr := j.commit(ctx, e, ent, args); jerr != nil {
 		return nil, false, fmt.Errorf("workflow: journal commit: %w", jerr)
 	}

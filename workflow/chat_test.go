@@ -2,6 +2,7 @@ package workflow_test
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/craggy-io/agent-sdk/model"
 	"os"
 	"path/filepath"
@@ -135,7 +136,37 @@ func TestCancelInstalledChat(t *testing.T) {
 		}
 	}()
 	result, err := h.RunChat(ctx, "test-chat", "Round the amount.")
-	if ctx.Err() != context.Canceled || result.Status != "cancelled" {
+	if err != nil || ctx.Err() != context.Canceled || result.Status != "cancelled" {
 		t.Fatalf("cancel=%+v ctx=%v err=%v", result, ctx.Err(), err)
+	}
+	assertStoppedTurnRecorded(t, h, result.RunID)
+}
+
+func assertStoppedTurnRecorded(t *testing.T, h *host.Host, runID string) {
+	t.Helper()
+	events, _, err := h.Sink().ReadEvents(t.Context(), 0, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var results, ends int
+	for _, event := range events {
+		if event.RunID != runID {
+			continue
+		}
+		switch event.Type {
+		case "wf.end":
+			ends++
+		case "wf.call":
+			var record struct{ Phase string }
+			if err := json.Unmarshal(event.Data, &record); err != nil {
+				t.Fatal(err)
+			}
+			if record.Phase == "result" {
+				results++
+			}
+		}
+	}
+	if results != 1 || ends != 1 {
+		t.Fatalf("stopped turn has %d committed agent results and %d workflow ends", results, ends)
 	}
 }
