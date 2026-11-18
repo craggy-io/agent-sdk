@@ -1,5 +1,7 @@
 github.com/craggy-io/agent-sdk v0.2.0 h1:p2D+eOu/FtDx0vzYH/XTneC8twouMVsLkiaVAhlbaUw=
 github.com/craggy-io/agent-sdk v0.2.0/go.mod h1:nkUlVsN4wWrlsdWWltQFlTw5JhdW9xCXGu67l/bcEOI=
+github.com/craggy-io/agent-sdk v0.2.1 h1:YOEhWOtyqJiqbkiGNtf/lPzIhOQoPTc0vPujbk6bvSk=
+github.com/craggy-io/agent-sdk v0.2.1/go.mod h1:nkUlVsN4wWrlsdWWltQFlTw5JhdW9xCXGu67l/bcEOI=
 github.com/craggy-io/agent-sdk/adapters/configyaml v0.2.0 h1:eV7Wc1Q7mJQGg8rXsYid3Z6tlwpKAnushl7o58jx8lo=
 github.com/craggy-io/agent-sdk/adapters/configyaml v0.2.0/go.mod h1:let5VWLpOyd4HX9LFqluiWFt5EO+8YyS2/L5vBdiDuM=
 github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.2.0 h1:fBEvMWCEbCNwlj6QLRcedV0E2ZBc8OnbJeNINlCMSgQ=

@@ -3,7 +3,7 @@ module github.com/craggy-io/agent-sdk/examples/host
 go 1.27.0
 
 require (
-	github.com/craggy-io/agent-sdk v0.2.0
+	github.com/craggy-io/agent-sdk v0.2.1
 	github.com/craggy-io/agent-sdk/adapters/configyaml v0.2.0
 	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.2.0
 	github.com/craggy-io/capability-services v0.3.2-0.20261107163912-cc133a193044

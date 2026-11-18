@@ -3,7 +3,7 @@ module github.com/craggy-io/agent-sdk/cmd/craggy-agent
 go 1.27.0
 
 require (
-	github.com/craggy-io/agent-sdk v0.2.0
+	github.com/craggy-io/agent-sdk v0.2.1
 	github.com/craggy-io/agent-sdk/adapters/configyaml v0.2.0
 	github.com/craggy-io/agent-sdk/adapters/tracesqlite v0.2.0
 )
