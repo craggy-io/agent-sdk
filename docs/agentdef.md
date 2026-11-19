@@ -28,7 +28,7 @@ The catalogued workflow carries that description into its pinned trace.
 | Kind | File | Value |
 | --- | --- | --- |
 | `agentsdk.agent@1` (`AgentKind`) | `.star` calling `agent(...)` exactly once; `name` must equal the contribution `id` | `*Definition` |
-| `agentsdk.skill@1` (`SkillKind`) | `SKILL.md`: front matter (`name`, `description`) and a body fetched on demand; a `name` must equal the `id` | `*Skill` |
+| `agentsdk.skill@1` (`SkillKind`) | `SKILL.md`: front matter (`name`, `description`, optional `for_tools`) and a body fetched on demand; a `name` must equal the `id` | `*Skill` |
 | `agentsdk.workflow@1` (`WorkflowKind`) | workflow `.star`, checked at load, run by package `workflow` | `*Workflow` |
 | `agentsdk.slot-filler@1` (`SlotFillerKind`) | YAML: what fills a slot an agent seeks (see "Slots") | `*Filler` |
 
@@ -139,6 +139,31 @@ resolves a runtime definition, which must extend a catalogued one.
 `ParseSource` compiles a runtime source declaring exactly one agent
 without cataloguing it (the runtime-registration path); it has no
 bundle, so nothing to `load()` and no files to read.
+
+## Skills for tools
+
+A skill can say which tools it explains, so that any agent able to call
+one of them carries it without naming it. A subsystem ships the skill
+in the same bundle as its tools:
+
+```markdown
+---
+name: boards
+description: How to lay out and solve an investigation board.
+for_tools: [boards.*, boards_*]
+---
+Place the evidence first, then ...
+```
+
+`for_tools` is one tool-name pattern or a flow list of them, matched as
+tool filters match names; `*` alone is refused. `Resolve` captures the
+catalogued skills with `for_tools` the agent does not already carry, and
+`Resolved.AttachToolSkills(names)` adds those matching one of `names` to
+`Skills`, `SkillBodies` and the prompt's skills list, recording
+`Provenance["skills.<name>"] = "tool <first match>"`. `host` calls it
+with the node's narrowed tool view (host view ∩ definition filter ∩
+call-site filter), so an agent whose filter leaves a tool out is never
+taught it. `WithoutSkills` drops these too.
 
 ## Slots
 

@@ -392,6 +392,8 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	if spec.Tools != nil {
 		view = narrow(view, *spec.Tools)
 	}
+	// Skills that explain tools this view holds come with them.
+	resolved.AttachToolSkills(toolNames(view))
 
 	// Thread (§2 chat continuity; §6.5 handle threads).
 	tKey := spec.threadKey

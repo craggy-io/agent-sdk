@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -304,23 +305,22 @@ func resolveChain(cat *bundle.Catalog, chain []*Definition, vars map[string]any,
 	}
 	r.SystemPrompt = strings.Join(parts, "\n\n")
 	r.promptWithoutSkills = r.SystemPrompt
-
-	if len(r.Skills) > 0 {
-		var list strings.Builder
-		list.WriteString("## Skills\n\nThe following skills are available via the skill tool:\n")
-		for _, name := range r.Skills {
-			sk, ok := lookup(cat, SkillKind, name)
-			if !ok {
-				return nil, fmt.Errorf("agentdef: %s: unknown skill %q", r.Name, name)
-			}
-			r.SkillBodies[name] = sk.Body
-			fmt.Fprintf(&list, "- `%s`: %s\n", sk.Name, sk.Description)
+	r.skillDescriptions = map[string]string{}
+	for _, name := range r.Skills {
+		sk, ok := lookup(cat, SkillKind, name)
+		if !ok {
+			return nil, fmt.Errorf("agentdef: %s: unknown skill %q", r.Name, name)
 		}
-		if r.SystemPrompt != "" {
-			r.SystemPrompt += "\n\n"
-		}
-		r.SystemPrompt += strings.TrimRight(list.String(), "\n")
+		r.SkillBodies[name] = sk.Body
+		r.skillDescriptions[name] = sk.Description
 	}
+	for _, def := range bundle.All(cat, SkillKind) {
+		if sk := def.Value; len(sk.ForTools) > 0 && !slices.Contains(r.Skills, sk.Name) {
+			r.toolSkills = append(r.toolSkills, sk)
+		}
+	}
+	slices.SortFunc(r.toolSkills, func(a, b *Skill) int { return strings.Compare(a.Name, b.Name) })
+	r.renderSkills()
 	return r, nil
 }
 
@@ -455,8 +455,53 @@ func resolveLoop(r *Resolved, d *Definition, outputRef, outputFrom *string) erro
 	return nil
 }
 
-// WithoutSkills removes the skill prompt and bodies from this run's projection.
+// renderSkills writes the system prompt: the fragments, then the
+// catalogue of the skills carried.
+func (r *Resolved) renderSkills() {
+	r.SystemPrompt = r.promptWithoutSkills
+	if len(r.Skills) == 0 {
+		return
+	}
+	var list strings.Builder
+	list.WriteString("## Skills\n\nThe following skills are available via the skill tool:\n")
+	for _, name := range r.Skills {
+		fmt.Fprintf(&list, "- `%s`: %s\n", name, r.skillDescriptions[name])
+	}
+	if r.SystemPrompt != "" {
+		r.SystemPrompt += "\n\n"
+	}
+	r.SystemPrompt += strings.TrimRight(list.String(), "\n")
+}
+
+// AttachToolSkills adds to the skills carried every catalogued skill
+// whose for_tools matches one of tools, the names of the tools the agent
+// can actually call (its narrowed view), and re-renders the prompt. It
+// records Provenance["skills.<name>"] as "tool <first match>" and
+// returns the names added. Tools the filter excluded are not in tools,
+// so a skill never teaches a tool the agent cannot call.
+func (r *Resolved) AttachToolSkills(tools []string) []string {
+	var added []string
+	for _, sk := range r.toolSkills {
+		i := slices.IndexFunc(tools, func(t string) bool { return model.MatchAny(sk.ForTools, t) })
+		if i < 0 || slices.Contains(r.Skills, sk.Name) {
+			continue
+		}
+		r.Skills = append(r.Skills, sk.Name)
+		r.SkillBodies[sk.Name] = sk.Body
+		r.skillDescriptions[sk.Name] = sk.Description
+		r.Provenance["skills."+sk.Name] = "tool " + tools[i]
+		added = append(added, sk.Name)
+	}
+	r.toolSkills = nil
+	if len(added) > 0 {
+		r.renderSkills()
+	}
+	return added
+}
+
+// WithoutSkills removes the skill prompt and bodies from this run's
+// projection, and the skills its tools would bring.
 func (r *Resolved) WithoutSkills() {
 	r.SystemPrompt = r.promptWithoutSkills
-	r.Skills, r.SkillBodies = nil, nil
+	r.Skills, r.SkillBodies, r.toolSkills = nil, nil, nil
 }

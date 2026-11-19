@@ -33,7 +33,8 @@ func agentOf(req model.Request) string {
 	if len(req.Items) == 0 {
 		return ""
 	}
-	return strings.TrimSuffix(strings.TrimPrefix(req.Items[0].Text, "You are "), ".")
+	first, _, _ := strings.Cut(req.Items[0].Text, "\n")
+	return strings.TrimSuffix(strings.TrimPrefix(first, "You are "), ".")
 }
 
 func (p *routedProvider) Sample(_ context.Context, req model.Request, _ func(model.Delta)) (model.Response, error) {

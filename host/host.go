@@ -132,6 +132,16 @@ func narrow(v ToolView, spec model.FilterSpec) ToolView {
 	return &narrowedView{base: v, specs: []model.FilterSpec{spec}}
 }
 
+// toolNames lists the names of the tools v holds.
+func toolNames(v ToolView) []string {
+	tools := v.Tools()
+	out := make([]string, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
 func (v *narrowedView) allows(t model.Tool) bool {
 	for _, s := range v.specs {
 		if !s.Allows(t) {

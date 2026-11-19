@@ -219,6 +219,18 @@ func TestAgentFileRules(t *testing.T) {
 			"bundle.yaml": manifest("  - {id: s, kind: agentsdk.skill@1, path: s/SKILL.md}\n"),
 			"s/SKILL.md":  file("---\nname: other\n---\nbody\n"),
 		}, `names "other" but bundle.yaml names the contribution "s"`},
+		"skill for every tool": {fstest.MapFS{
+			"bundle.yaml": manifest("  - {id: s, kind: agentsdk.skill@1, path: SKILL.md}\n"),
+			"SKILL.md":    file("---\nname: s\nfor_tools: [boards.*, '*']\n---\nbody\n"),
+		}, "would give the skill to every agent"},
+		"skill tool pattern": {fstest.MapFS{
+			"bundle.yaml": manifest("  - {id: s, kind: agentsdk.skill@1, path: SKILL.md}\n"),
+			"SKILL.md":    file("---\nname: s\nfor_tools: boards.[\n---\nbody\n"),
+		}, "is not a tool-name pattern"},
+		"skill for no tools": {fstest.MapFS{
+			"bundle.yaml": manifest("  - {id: s, kind: agentsdk.skill@1, path: SKILL.md}\n"),
+			"SKILL.md":    file("---\nname: s\nfor_tools: []\n---\nbody\n"),
+		}, "names no tools"},
 		"prompt file outside the bundle": {fstest.MapFS{
 			"bundle.yaml":   manifest("  - {id: x, kind: agentsdk.agent@1, path: agents/x.star}\n"),
 			"agents/x.star": file(`agent(name = "x", prompt = [{"file": "../../secret.md"}])`),

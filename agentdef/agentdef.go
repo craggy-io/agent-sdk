@@ -102,10 +102,15 @@ type Definition struct {
 // Skill is one loaded skill: name/description plus body. Only the
 // catalogue (name+description) enters the system prompt; the body is
 // fetched on demand through the loop's skill built-in.
+//
+// ForTools are tool-name patterns (front matter for_tools): an agent
+// whose tool view holds a tool one of them matches carries the skill
+// without naming it (Resolved.AttachToolSkills).
 type Skill struct {
 	Name        string
 	Description string
 	Body        string
+	ForTools    []string
 }
 
 // Resolved is the immutable output of inheritance resolution, with
@@ -136,6 +141,11 @@ type Resolved struct {
 	// joined with a blank line, skills catalogue last.
 	SystemPrompt        string `json:"system_prompt"`
 	promptWithoutSkills string
+	// skillDescriptions are the carried skills' catalogue lines, and
+	// toolSkills the catalogued skills with ForTools the agent does not
+	// carry yet, both captured from the resolving catalog.
+	skillDescriptions map[string]string
+	toolSkills        []*Skill
 	// OutputSchema is the resolved loop.output schema, if any.
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	// Fragments are the prompt fragment names in order.

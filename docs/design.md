@@ -39,7 +39,9 @@ filters union and `max_effect` only tightens; skills and delegates
 union; loop fields override one by one and the output schema replaces.
 Resolution renders one system prompt (templates with
 `missingkey=error`, skills catalogue last) and records provenance for
-every field. Dynamic definitions must extend a loaded one.
+every field. A skill whose `for_tools` matches a tool in the node's
+narrowed view joins the agent's skills when the host runs it. Dynamic
+definitions must extend a loaded one.
 
 Definitions, skills and workflows are bundles (foundation-kit): each
 folder has a `bundle.yaml` listing one contribution per agent, skill or
