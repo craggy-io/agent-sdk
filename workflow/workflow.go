@@ -169,7 +169,7 @@ func ResumeEx(ctx context.Context, s *host.Host, runID string, opts Options) (Re
 	}
 	opts.RunID, opts.Resume = runID, true
 	if pin.ChatCatalog != "" {
-		opts.chat, err = installedChat(s, wf, runID, pin.ChatCatalog)
+		opts.chat, err = installedChat(s, wf, runID, pin.ChatCatalog, input)
 		if err != nil {
 			return Result{Status: StatusResumeIncompatible, RunID: runID}, err
 		}
@@ -296,7 +296,7 @@ func executeScoped(ctx context.Context, s *host.Host, wf *agentdef.Workflow, sou
 	}
 	if e.chat == nil && wf.Chat {
 		var err error
-		e.chat, err = installedChat(s, wf, e.runID, "")
+		e.chat, err = installedChat(s, wf, e.runID, "", input)
 		if err != nil {
 			return Result{Status: StatusResumeIncompatible, RunID: e.runID}, err
 		}

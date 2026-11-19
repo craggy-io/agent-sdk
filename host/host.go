@@ -457,6 +457,16 @@ func (ts *threadStore) acquire(key string) (*transcript.Transcript, func()) {
 	return tr, lk.Unlock
 }
 
+// busy reports whether a node is writing the thread key now.
+func (ts *threadStore) busy(key string) bool {
+	_, lk := ts.get(key)
+	if !lk.TryLock() {
+		return true
+	}
+	lk.Unlock()
+	return false
+}
+
 func (ts *threadStore) items(key string) []model.Item {
 	tr, _ := ts.get(key)
 	return tr.Items()

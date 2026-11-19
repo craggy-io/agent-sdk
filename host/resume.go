@@ -298,7 +298,7 @@ func (s *Host) replayHandle(e trace.Event) {
 		return
 	}
 	h := &handle{id: hi.ID, defName: hi.Def, owner: hi.Owner,
-		conv: hi.Conversation, threadKey: "handle:" + hi.ID,
+		conv: hi.Conversation, threadKey: "handle:" + hi.ID, transcript: hi.Thread,
 		state: restoredState(hi.State), prevNode: hi.PreviousNode,
 		oneShot: hi.OneShot, last: hi.LastResult}
 	h.spec = ExecSpec{Name: hi.Def}

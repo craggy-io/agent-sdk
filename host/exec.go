@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -41,6 +42,16 @@ type ExecSpec struct {
 	// validator for structured completions (loop.OutputCheck).
 	OutputCheck        loop.OutputCheck
 	OutputCheckRetries int
+	// Group are the agents a caller lets this run delegate to beside the
+	// ones its definition names, and every agent it starts may delegate
+	// to them too. A chat workflow that takes a roster sets it to the
+	// turn's roster; empty keeps the parent's group.
+	Group []string
+	// GroupThread is the chat thread under which each agent of the group
+	// keeps a thread of its own (MemberThread), inherited like Group. An
+	// agent of the group started as a subagent carries on in that thread,
+	// so it remembers the chat whichever way it was reached.
+	GroupThread string
 	// Fills are the slots filled for this run (agentdef.ResolveFilled).
 	// They apply to this agent only, not to the agents it delegates to.
 	Fills []agentdef.Fill
@@ -136,14 +147,17 @@ type nodeCtx struct {
 	owner     string // caller ID that owns handles spawned from here
 	view      ToolView
 	delegates []string
-	workflows bool
-	layers    []config.Layer
-	slot      *slotRef
-	handleID  string
-	conv      string
-	address   string // agent_send address; "" for an ephemeral node
-	inbox     string // mailbox target
-	awaits    *awaitSet
+	group     []string // ExecSpec.Group, inherited by the agents this node starts
+	// groupThread is ExecSpec.GroupThread, inherited the same way.
+	groupThread string
+	workflows   bool
+	layers      []config.Layer
+	slot        *slotRef
+	handleID    string
+	conv        string
+	address     string // agent_send address; "" for an ephemeral node
+	inbox       string // mailbox target
+	awaits      *awaitSet
 }
 
 // rootNodeCtx is the lineage root of a new run started by the root caller.
@@ -438,7 +452,7 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	nc := &nodeCtx{
 		run: run, nodeID: nodeID, parentID: parent.nodeID, depth: depth,
 		caller: caller, owner: caller.ID, view: view,
-		delegates: resolved.Delegates, workflows: resolved.Workflows,
+		delegates: resolved.Delegates, group: groupOf(spec, parent), groupThread: cmp.Or(spec.GroupThread, parent.groupThread), workflows: resolved.Workflows,
 		layers: layers, handleID: spec.handleID,
 		slot: &slotRef{sem: run.sem},
 		conv: conv, address: address, inbox: mailTarget, awaits: newAwaitSet(),
@@ -521,6 +535,22 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 		HandleID: spec.handleID, DefName: resolved.Name}, runErr
 }
 
+// groupOf is the group a node runs with: the one its spec grants, else
+// its parent's.
+func groupOf(spec ExecSpec, parent *nodeCtx) []string {
+	if len(spec.Group) > 0 {
+		return spec.Group
+	}
+	return parent.group
+}
+
+// MemberThread is the thread an agent keeps in a chat: the one a chat
+// workflow runs it in, and the one it carries on in when an agent of the
+// chat's group starts it.
+func MemberThread(chat, agent string) string {
+	return fmt.Sprintf("chat:%d:%s:%s", len(chat), chat, agent)
+}
+
 func callerPtr(c model.CallerInfo) *model.CallerInfo {
 	cp := c
 	return &cp
@@ -540,7 +570,7 @@ func (s *Host) nodeStartData(resolved *agentdef.Resolved, view ToolView, parent,
 		"profile": eff.ProfileName, "model": eff.Profile.Model,
 		"config_sources": eff.Sources, "tools": names, "tool_hashes": hashes,
 		"filter": resolved.Tools, "budgets": parent.run.budget.snapshot(),
-		"delegates": resolved.Delegates, "workflows": resolved.Workflows,
+		"delegates": resolved.Delegates, "group": nc.group, "workflows": resolved.Workflows,
 		"conversation": nc.conv, "address": nc.address,
 	}
 }

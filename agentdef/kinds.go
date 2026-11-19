@@ -50,12 +50,35 @@ const (
 // later. Package workflow runs Unit's top level with its built-ins, then
 // run(input).
 type Workflow struct {
-	Chat        bool
+	Chat bool
+	// Roles is where a chat workflow's agents come from: "" for its own
+	// bundle's agents alone, RolesRoster for those and the roster each
+	// turn is sent with (host.WithGroup).
+	Roles       string
 	Name        string
 	Description string
 	Unit        *starcompile.Unit
 	Triggers    []trigger.Spec
 	InputSchema json.RawMessage
+}
+
+// RolesRoster is the Roles of a chat workflow that also runs the agents
+// each turn names, wherever they were installed from.
+const RolesRoster = "roster"
+
+// TakesRoster reports whether each turn of the workflow names its agents.
+func (w *Workflow) TakesRoster() bool { return w.Roles == RolesRoster }
+
+// CheckRoles is the rule for workflow(roles=...): "" or RolesRoster, and
+// a roster only for a chat workflow.
+func CheckRoles(roles string, chat bool) error {
+	switch {
+	case roles != "" && roles != RolesRoster:
+		return fmt.Errorf("workflow: roles must be %q when set, not %q", RolesRoster, roles)
+	case roles != "" && !chat:
+		return fmt.Errorf("workflow: roles = %q needs chat = True", roles)
+	}
+	return nil
 }
 
 // Source returns the workflow's source text.

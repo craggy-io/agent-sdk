@@ -34,7 +34,11 @@ new config to future runs.
 Import `github.com/craggy-io/agent-sdk/workflow` for its registration when
 integrating the host directly. `RunAgent` and `ExecAgent` execute the embedded
 `agent-turn` workflow. `RunChat` selects an installed workflow declared with
-`workflow(chat=True, ...)`. Each role gets its own persistent thread under the
+`workflow(chat=True, ...)`. `WithGroup(names...)` is the turn's roster for
+a workflow declared `roles = "roster"` (see [workflow](workflow.md)).
+`ExecSpec.Group` lets a run, and every agent it starts, delegate to those
+agents beside its definition's `delegates`; `ExecSpec.GroupThread` is the
+chat under which each keeps its thread, `MemberThread(chat, agent)`. Each role gets its own persistent thread under the
 caller's chat thread key. An interactive turn can continue after host restart
 by sending another message to the same chat. Standalone workflow replay of an
 interactive turn is refused because its caller-supplied callbacks belong to the

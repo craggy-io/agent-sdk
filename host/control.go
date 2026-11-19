@@ -8,8 +8,11 @@ package host
 // new node with a previous_node link. Completed nodes never reopen.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,16 +31,19 @@ const (
 
 // HandleInfo is the authorized view of one handle (§6.5 status/list).
 type HandleInfo struct {
-	ID            string  `json:"id"`
-	Def           string  `json:"def"`
-	Owner         string  `json:"owner"`
-	Conversation  string  `json:"conversation,omitempty"`
-	State         string  `json:"state"`
-	Activation    string  `json:"activation,omitempty"` // current node ID
-	PreviousNode  string  `json:"previous_node,omitempty"`
-	PendingInputs int     `json:"pending_inputs"`
-	OneShot       bool    `json:"one_shot,omitempty"`
-	LastResult    *Result `json:"last_result,omitempty"`
+	ID            string `json:"id"`
+	Def           string `json:"def"`
+	Owner         string `json:"owner"`
+	Conversation  string `json:"conversation,omitempty"`
+	State         string `json:"state"`
+	Activation    string `json:"activation,omitempty"` // current node ID
+	PreviousNode  string `json:"previous_node,omitempty"`
+	PendingInputs int    `json:"pending_inputs"`
+	// Thread is the thread its activations write, when it is not the
+	// handle's own: its thread in the chat of the group that started it.
+	Thread     string  `json:"thread,omitempty"`
+	OneShot    bool    `json:"one_shot,omitempty"`
+	LastResult *Result `json:"last_result,omitempty"`
 }
 
 type handle struct {
@@ -47,8 +53,11 @@ type handle struct {
 	owner     string
 	conv      string // conversation whose agents may message it (§6.7)
 	threadKey string
-	state     string
-	oneShot   bool
+	// transcript is the thread the handle's activations write, when it is
+	// not its own (threadKey): a group agent's thread in its chat.
+	transcript string
+	state      string
+	oneShot    bool
 
 	// activation template: how to run the next activation.
 	spec   ExecSpec
@@ -122,7 +131,7 @@ func (h *handle) info(pending int) HandleInfo {
 	defer h.mu.Unlock()
 	return HandleInfo{ID: h.id, Def: h.defName, Owner: h.owner, Conversation: h.conv,
 		State: h.state, Activation: h.currentNode, PreviousNode: h.prevNode,
-		PendingInputs: pending, OneShot: h.oneShot, LastResult: h.last}
+		PendingInputs: pending, Thread: h.transcript, OneShot: h.oneShot, LastResult: h.last}
 }
 
 func (s *Host) emitState(ctx context.Context, h *handle, op string) {
@@ -130,6 +139,21 @@ func (s *Host) emitState(ctx context.Context, h *handle, op string) {
 	_ = s.emit(ctx, trace.Event{Type: "agent.state", NodeID: inf.Activation,
 		Data: mustJSON(map[string]any{"op": op, "handle": inf})})
 	s.changed.fire()
+}
+
+// memberTranscript is the thread an agent of nc's group, name, carries on
+// in when nc starts it: its own thread in the chat, unless that thread is
+// in use now (by the agent itself, which may be waiting on nc), when it
+// starts fresh as any delegate does.
+func (s *Host) memberTranscript(nc *nodeCtx, name string) string {
+	if nc.groupThread == "" || !slices.Contains(nc.group, name) {
+		return ""
+	}
+	key := threadKey(MemberThread(nc.groupThread, name))
+	if s.threads.busy(key) {
+		return ""
+	}
+	return key
 }
 
 // SpawnSpec is a spawn request: an ExecSpec plus handle options.
@@ -164,6 +188,9 @@ func (s *Host) Spawn(ctx context.Context, spec SpawnSpec) (HandleInfo, error) {
 		spec: spec.ExecSpec, parent: parent, anchor: ctx,
 	}
 	h.threadKey = "handle:" + h.id
+	if inNode {
+		h.transcript = s.memberTranscript(nc, name)
+	}
 	if conv == "" {
 		conv = h.threadKey
 	}
@@ -206,7 +233,7 @@ func (s *Host) startActivation(h *handle, task string, armFollow bool) {
 	h.currentNode = spec.nodeID
 	spec.handleID = h.id
 	spec.conv = h.conv
-	spec.threadKey = h.threadKey
+	spec.threadKey = cmp.Or(h.transcript, h.threadKey)
 	spec.mailTarget = h.threadKey
 	spec.armFollow = armFollow
 	spec.prevNode = h.prevNode
@@ -261,8 +288,8 @@ func (s *Host) execInFreshRun(ctx context.Context, parent *nodeCtx, spec ExecSpe
 	run := s.newRun(ctx)
 	p := &nodeCtx{run: run, nodeID: parent.nodeID, parentID: parent.parentID,
 		depth: parent.depth, caller: parent.caller, owner: parent.owner,
-		view: parent.view, delegates: parent.delegates, workflows: parent.workflows,
-		layers: parent.layers, handleID: parent.handleID, conv: parent.conv,
+		view: parent.view, delegates: parent.delegates, group: parent.group, workflows: parent.workflows,
+		groupThread: parent.groupThread, layers: parent.layers, handleID: parent.handleID, conv: parent.conv,
 		address: parent.address, inbox: parent.inbox, awaits: newAwaitSet()}
 	ctx = withNodeCtx(ctx, p)
 	_ = s.emit(ctx, trace.Event{Type: "run.start", RunID: run.id,
@@ -518,6 +545,9 @@ func requireDelegate(nc *nodeCtx, name string) error {
 			return nil
 		}
 	}
+	if slices.Contains(nc.group, name) {
+		return nil
+	}
 	return model.Errorf(model.CodeDenied, "not_delegate", "host: %q is not an allowed delegate of %s", name, nc.caller.ID)
 }
 
@@ -563,28 +593,52 @@ var messagingTools = []model.Tool{
 		`{"type":"object","required":["handles"],"properties":{"handles":{"type":"array","items":{"type":"string"}},"timeout_ms":{"type":"integer","description":"default 30000"}},"additionalProperties":false}`),
 }
 
-// delegationTools are offered when the definition names delegates.
-var delegationTools = []model.Tool{
-	builtin("agent", "mutating",
-		"Run a delegate agent on a task and wait for its result. The agent stays in this conversation afterwards (its handle is in the result): agent_send it follow-up questions. Returns early with status running if you receive a message meanwhile; agent_wait for the result after answering.",
-		`{"type":"object","required":["name","task"],"properties":{"name":{"type":"string","description":"a delegate of this agent"},"task":{"type":"string"},"profile":{"type":"string"}},"additionalProperties":false}`),
-	builtin("agent_spawn", "mutating",
-		"Start a delegate agent on a task in the background and return its handle at once. Collect it with agent_wait; you also wait for it before you finish.",
-		`{"type":"object","required":["name","task"],"properties":{"name":{"type":"string","description":"a delegate of this agent"},"task":{"type":"string"},"profile":{"type":"string"}},"additionalProperties":false}`),
-	builtin("agent_interrupt", "mutating", "Interrupt an agent you started; it goes idle.", handleSchema),
-	builtin("agent_resume", "mutating", "Reopen an agent you closed.", handleSchema),
-	builtin("agent_close", "mutating", "Close an agent you started; it can no longer be woken until resumed.", handleSchema),
+// delegationTools are offered when the definition names delegates or the
+// node runs in a group. names are the agents it may start, when they can
+// be listed (no "*"), so the model is told whom it may call.
+func delegationTools(names []string) []model.Tool {
+	who := "a delegate of this agent"
+	if len(names) > 0 {
+		who = "the agent to run, one of: " + strings.Join(names, ", ")
+	}
+	name, _ := json.Marshal(map[string]string{"type": "string", "description": who})
+	task := `{"type":"object","required":["name","task"],"properties":{"name":` + string(name) + `,"task":{"type":"string"},"profile":{"type":"string"}},"additionalProperties":false}`
+	return []model.Tool{
+		builtin("agent", "mutating",
+			"Run a delegate agent on a task and wait for its result. The agent stays in this conversation afterwards (its handle is in the result): agent_send it follow-up questions. Returns early with status running if you receive a message meanwhile; agent_wait for the result after answering.", task),
+		builtin("agent_spawn", "mutating",
+			"Start a delegate agent on a task in the background and return its handle at once. Collect it with agent_wait; you also wait for it before you finish.", task),
+		builtin("agent_interrupt", "mutating", "Interrupt an agent you started; it goes idle.", handleSchema),
+		builtin("agent_resume", "mutating", "Reopen an agent you closed.", handleSchema),
+		builtin("agent_close", "mutating", "Close an agent you started; it can no longer be woken until resumed.", handleSchema),
+	}
+}
+
+// callable is who a node may start: its delegates and its group, or nil
+// when that can't be listed because a delegate is "*".
+func (nc *nodeCtx) callable() []string {
+	if slices.Contains(nc.delegates, "*") {
+		return nil
+	}
+	out := slices.Clone(nc.delegates)
+	for _, name := range nc.group {
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 var workflowTool = builtin("workflow", "mutating", "Run a workflow: a catalogued one by name, or Starlark source you write.",
 	`{"type":"object","properties":{"workflow":{"type":"string","description":"catalogued workflow name"},"source":{"type":"string","description":"Starlark workflow source, instead of a name"},"args":{"type":"object"}},"additionalProperties":false}`)
 
 // Tools lists this node's built-ins: messaging always, delegation when
-// the definition names delegates, workflow when it enables workflows.
+// the definition names delegates or the node runs in a group, workflow
+// when it enables workflows.
 func (d *delegateImpl) Tools() []model.Tool {
 	out := append([]model.Tool(nil), messagingTools...)
-	if len(d.nc.delegates) > 0 {
-		out = append(out, delegationTools...)
+	if len(d.nc.delegates) > 0 || len(d.nc.group) > 0 {
+		out = append(out, delegationTools(d.nc.callable())...)
 	}
 	if d.nc.workflows {
 		out = append(out, workflowTool)

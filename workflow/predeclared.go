@@ -52,7 +52,10 @@ func predeclared(e *exec) starlark.StringDict {
 		pre[name] = value
 	}
 	if e.chat != nil {
-		return starlark.StringDict{"workflow": pre["workflow"], "schema": pre["schema"], "agent": b("agent", chatAgent)}
+		// A chat turn runs its roles, one after another or side by side,
+		// and composes their text.
+		return starlark.StringDict{"workflow": pre["workflow"], "schema": pre["schema"], "agent": b("agent", chatAgent),
+			"spec": b("spec", chatSpec), "parallel": pre["parallel"], "render": pre["render"], "json": pre["json"]}
 	}
 	return pre
 }

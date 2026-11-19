@@ -74,7 +74,10 @@ func workflowDeclaration(ctx context.Context, u *starcompile.Unit) (*Workflow, e
 	pre["workflow"] = starlark.NewBuiltin("workflow", func(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		var desc string
 		var input, agents, profiles, limits, triggers starlark.Value
-		if err := starlark.UnpackArgs("workflow", args, kwargs, "description?", &desc, "input?", &input, "agents?", &agents, "profiles?", &profiles, "limits?", &limits, "triggers?", &triggers, "chat?", &w.Chat); err != nil {
+		if err := starlark.UnpackArgs("workflow", args, kwargs, "description?", &desc, "input?", &input, "agents?", &agents, "profiles?", &profiles, "limits?", &limits, "triggers?", &triggers, "chat?", &w.Chat, "roles?", &w.Roles); err != nil {
+			return nil, err
+		}
+		if err := CheckRoles(w.Roles, w.Chat); err != nil {
 			return nil, err
 		}
 		var err error

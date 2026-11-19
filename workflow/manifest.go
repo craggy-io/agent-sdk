@@ -9,6 +9,7 @@ import (
 
 	"go.starlark.net/starlark"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	scriptschema "github.com/craggy-io/script-services/schema"
 )
@@ -80,12 +81,15 @@ func (v *manifestValue) Hash() (uint32, error) { return 0, fmt.Errorf("unhashabl
 // workflowBuiltin implements workflow(description, input, agents,
 // profiles, limits) at file scope (§6.1).
 func workflowBuiltin(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var desc string
+	var desc, roles string
 	var chat bool
 	var inputV, agentsV, profilesV, limitsV, triggersV starlark.Value
 	if err := starlark.UnpackArgs("workflow", args, kwargs,
 		"description?", &desc, "input?", &inputV, "agents?", &agentsV,
-		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV, "chat?", &chat); err != nil {
+		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV, "chat?", &chat, "roles?", &roles); err != nil {
+		return nil, err
+	}
+	if err := agentdef.CheckRoles(roles, chat); err != nil {
 		return nil, err
 	}
 	if err := validateDispatch(thread, chat, triggersV); err != nil {
