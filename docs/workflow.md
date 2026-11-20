@@ -54,7 +54,9 @@ A chat workflow's roles are the parts its agents play. Declare them with
 `roles = [role(name, description=..., agent=..., seats=...)]`: `agent` plays
 the role unless a turn casts another (an agent of any bundle, usually the
 workflow's own), and `seats` is how many agents play it (1 by default, or
-`"all"` for every installed agent but the workflow's own). A workflow that
+`"all"` for every installed agent but the workflow's own, and but the
+agents any chat workflow brings to play a role it declares, such as a
+coordinator or a merger: `agentdef.EveryAgent`). A workflow that
 declares no roles has one per agent of its own bundle, played by that
 agent. Each turn may cast other installed agents in any role with
 `host.WithCast({role: [agents]})`, as many as it likes in each; a role it

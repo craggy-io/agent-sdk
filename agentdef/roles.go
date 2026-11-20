@@ -20,12 +20,12 @@ type Role struct {
 	Agent string `json:"agent,omitempty"`
 	// Seats is how many agents play the role unless a turn casts a
 	// different number; SeatsAll means every installed agent but the
-	// workflow's own.
+	// workflow's own and other workflows' role agents (EveryAgent).
 	Seats int `json:"seats"`
 }
 
-// SeatsAll is the Seats of a role every installed agent plays, but the
-// workflow's own, unless a turn casts others.
+// SeatsAll is the Seats of a role every installed agent plays
+// (EveryAgent), unless a turn casts others.
 const SeatsAll = -1
 
 // ChatRoles are the roles of a chat workflow whose bundle is owner: the
@@ -111,4 +111,31 @@ func ParseRoles(v starlark.Value, chat bool) ([]Role, error) {
 		out = append(out, r.role)
 	}
 	return out, nil
+}
+
+// EveryAgent are the agents that play a role of every seat in the chat
+// workflow whose bundle is owner, when a turn casts none, by name: every
+// installed agent but the workflow's own, and but the ones any chat
+// workflow brings to play a role it declares (a coordinator, a merger),
+// which are there for that role and nothing else.
+func EveryAgent(cat *bundle.Catalog, owner string) []string {
+	helpers := map[string]bool{}
+	for _, def := range bundle.All(cat, WorkflowKind) {
+		if !def.Value.Chat {
+			continue
+		}
+		for _, role := range def.Value.Roles {
+			if agent, ok := bundle.Lookup(cat, AgentKind, role.Agent); ok && agent.Owner.ID == def.Owner.ID {
+				helpers[role.Agent] = true
+			}
+		}
+	}
+	var out []string
+	for _, def := range bundle.All(cat, AgentKind) {
+		if def.Owner.ID != owner && !helpers[def.Value.Name] {
+			out = append(out, def.Value.Name)
+		}
+	}
+	slices.Sort(out)
+	return out
 }

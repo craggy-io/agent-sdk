@@ -105,17 +105,10 @@ func (t *chatTurn) castRoles(roles []agentdef.Role, cast map[string][]string) er
 }
 
 // declaredPlayers are the agents that play role when a turn casts none:
-// every installed agent but the workflow's own for a role of every seat,
-// else the agent it names.
+// agentdef.EveryAgent for a role of every seat, else the agent it names.
 func (t *chatTurn) declaredPlayers(role agentdef.Role) []string {
 	if role.Seats == agentdef.SeatsAll {
-		var out []string
-		for _, def := range bundle.All(t.catalog, agentdef.AgentKind) {
-			if def.Owner.ID != t.owner {
-				out = append(out, def.Value.Name)
-			}
-		}
-		return out
+		return agentdef.EveryAgent(t.catalog, t.owner)
 	}
 	if role.Agent != "" {
 		return []string{role.Agent}
