@@ -50,16 +50,32 @@ phase=..., output=...)`, or side by side with `parallel([spec(name, task=...),
 the role must complete against, read back as `result.output`. Return the
 final role result.
 
-A chat workflow's roles are its own bundle's agents. Declare
-`roles = "roster"` and each turn may also run the agents its caller names
-with `host.WithGroup`, from any bundle: they arrive as `input.roster`, a
-list of `{name, description}` (declare it in `input`). A turn without a
-roster, or naming an agent that isn't installed, fails; a workflow without
-`roles = "roster"` refuses a roster. Every agent the turn runs may call the
-roster's agents as subagents (`agent`, `agent_spawn`, told whom it may
-call), and so may the agents they start. Each agent keeps its own thread
-in the chat (`host.MemberThread`) from turn to turn, and an agent of the
-roster started as a subagent carries on in that thread, unless it is
+A chat workflow's roles are the parts its agents play. Declare them with
+`roles = [role(name, description=..., agent=..., seats=...)]`: `agent` plays
+the role unless a turn casts another (an agent of any bundle, usually the
+workflow's own), and `seats` is how many agents play it (1 by default, or
+`"all"` for every installed agent but the workflow's own). A workflow that
+declares no roles has one per agent of its own bundle, played by that
+agent. Each turn may cast other installed agents in any role with
+`host.WithCast({role: [agents]})`, as many as it likes in each; a role it
+leaves out is played as declared. The workflow reads who plays each role
+as `input.cast`, by role a list of `{name, description}`, and calls a role
+by name (`agent("coordinator", ...)` runs the first agent in its seats) or
+an agent cast in it by its own name. Casting a role it doesn't have, or an
+agent that isn't installed, fails the turn; so does calling a role nobody
+plays, or an agent nobody cast that isn't the workflow's own. The
+workflow's own agents run their authored loops; an agent of another bundle
+runs as that bundle wrote it.
+
+`host.WithSettings({field: value})` gives the turn the workflow's other
+input fields (anything but `message` and `cast`), checked against its
+`input` schema: a host keeps them per chat as the workflow's settings.
+
+Every agent the turn runs may call the agents cast in its roles as
+subagents (`agent`, `agent_spawn`, told whom it may call), and so may the
+agents they start. Each agent keeps its own thread in the chat
+(`host.MemberThread`) from turn to turn, whichever role it plays, and an
+agent cast started as a subagent carries on in that thread, unless it is
 running at that moment, when it starts fresh. Role definitions resolve against one installed
 catalogue snapshot, including loop and skill inheritance across declared bundle
 dependencies. Interactive sends share a budget and retain a conversation thread

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,10 +44,10 @@ type ExecSpec struct {
 	// validator for structured completions (loop.OutputCheck).
 	OutputCheck        loop.OutputCheck
 	OutputCheckRetries int
-	// Group are the agents a caller lets this run delegate to beside the
-	// ones its definition names, and every agent it starts may delegate
-	// to them too. A chat workflow that takes a roster sets it to the
-	// turn's roster; empty keeps the parent's group.
+	// Group are the agents a run may delegate to beside the ones its
+	// definition names, and every agent it starts may delegate to them
+	// too. A chat workflow sets it to the agents cast in its roles;
+	// empty keeps the parent's group.
 	Group []string
 	// GroupThread is the chat thread under which each agent of the group
 	// keeps a thread of its own (MemberThread), inherited like Group. An
@@ -55,6 +57,13 @@ type ExecSpec struct {
 	// Fills are the slots filled for this run (agentdef.ResolveFilled).
 	// They apply to this agent only, not to the agents it delegates to.
 	Fills []agentdef.Fill
+	// Cast, for a chat workflow, says which installed agents play its
+	// roles this turn: by role, the agents in its seats, in order. A role
+	// left out is played as the workflow declares (agentdef.Role).
+	Cast map[string][]string
+	// Settings, for a chat workflow, are the values of its input fields
+	// besides message and cast, which it reads as input like any other.
+	Settings map[string]any
 
 	// internal wiring (handles)
 	handleID   string
@@ -110,6 +119,23 @@ func WithOutputCheck(check loop.OutputCheck, maxRetries int) RunOption {
 // the same slot are left out (agentdef.ResolveFilled).
 func WithFills(fills ...agentdef.Fill) RunOption {
 	return func(e *ExecSpec) { e.Fills = append([]agentdef.Fill(nil), fills...) }
+}
+
+// WithCast says, for a chat workflow's turn, which installed agents play
+// each of the roles named (ExecSpec.Cast).
+func WithCast(cast map[string][]string) RunOption {
+	return func(e *ExecSpec) {
+		e.Cast = map[string][]string{}
+		for role, agents := range cast {
+			e.Cast[role] = slices.Clone(agents)
+		}
+	}
+}
+
+// WithSettings gives a chat workflow's turn the values of its input
+// fields besides message and cast (ExecSpec.Settings).
+func WithSettings(settings map[string]any) RunOption {
+	return func(e *ExecSpec) { e.Settings = maps.Clone(settings) }
 }
 
 // runState is one run tree: config snapshot, shared budget, semaphore (§11).

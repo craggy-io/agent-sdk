@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -517,6 +518,12 @@ func (e *exec) validateInput(input map[string]any) error {
 		return nil
 	}
 	schema := e.man.inputSchema()
+	if _, cast := input["cast"]; cast && e.chat != nil {
+		// A chat turn's cast comes from the engine, not the workflow's
+		// own input fields.
+		input = maps.Clone(input)
+		delete(input, "cast")
+	}
 	b, _ := json.Marshal(input)
 	if b == nil {
 		b = []byte("{}")

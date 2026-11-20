@@ -23,9 +23,11 @@ type chatTurn struct {
 	spec        host.ExecSpec
 	catalog     *bundle.Catalog
 	owner       string
-	// roster are the agents, from any bundle, a workflow declared
-	// roles = "roster" may run this turn. Each agent it runs may call them.
-	roster []string
+	// players are the agents that play each of the workflow's roles this
+	// turn, by role, in seat order; group is each of them once. Every
+	// agent the turn runs may call the group as subagents.
+	players map[string][]string
+	group   []string
 
 	// mu guards what the turn's agent calls leave behind, which parallel
 	// branches write at once.
@@ -38,7 +40,7 @@ type chatTurn struct {
 }
 
 // installedChat binds all role resolutions to the same installed revision.
-// input is the run's input, which holds a roster workflow's roster.
+// input is the run's input, which records the turn's cast.
 func installedChat(h *host.Host, wf *agentdef.Workflow, thread, digest string, input map[string]any) (*chatTurn, error) {
 	if !wf.Chat || h.Defs() == nil {
 		return nil, fmt.Errorf("chat workflow %q is no longer installed", wf.Name)
@@ -49,42 +51,91 @@ func installedChat(h *host.Host, wf *agentdef.Workflow, thread, digest string, i
 		return nil, fmt.Errorf("chat workflow %q or its installed definitions changed", wf.Name)
 	}
 	t := &chatTurn{catalog: catalog, owner: def.Owner.ID, spec: host.ExecSpec{Thread: thread}}
-	if wf.TakesRoster() {
-		t.roster = rosterNames(input)
-		if _, err := t.rosterInput(); err != nil {
-			return nil, err
-		}
+	if err := t.castRoles(wf.ChatRoles(catalog, t.owner), castOf(input)); err != nil {
+		return nil, err
 	}
 	return t, nil
 }
 
-// rosterNames are the agents a run's input.roster names.
-func rosterNames(input map[string]any) []string {
-	entries, _ := input["roster"].([]any)
-	var names []string
-	for _, entry := range entries {
-		if m, ok := entry.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok && name != "" {
-				names = append(names, name)
+// castOf is the cast a run's input.cast records, read back on resume.
+func castOf(input map[string]any) map[string][]string {
+	recorded, _ := input["cast"].(map[string]any)
+	cast := map[string][]string{}
+	for role, seats := range recorded {
+		entries, _ := seats.([]any)
+		cast[role] = []string{}
+		for _, entry := range entries {
+			if m, ok := entry.(map[string]any); ok {
+				if name, ok := m["name"].(string); ok && name != "" {
+					cast[role] = append(cast[role], name)
+				}
 			}
 		}
 	}
-	return names
+	return cast
 }
 
-// rosterInput is the roster as the workflow reads it, input.roster: each
-// agent's name and description, from the turn's catalogue. An agent that
-// is no longer installed fails the turn rather than be left out unseen.
-func (t *chatTurn) rosterInput() ([]any, error) {
-	out := make([]any, 0, len(t.roster))
-	for _, name := range t.roster {
-		def, ok := bundle.Lookup(t.catalog, agentdef.AgentKind, name)
-		if !ok {
-			return nil, fmt.Errorf("the roster names %q, and no agent of that name is installed", name)
+// castRoles settles who plays each role this turn: the agents cast in it,
+// or the ones the workflow declares. A role the workflow doesn't have, or
+// an agent that isn't installed, fails the turn rather than be left out
+// unseen.
+func (t *chatTurn) castRoles(roles []agentdef.Role, cast map[string][]string) error {
+	for role := range cast {
+		if !slices.ContainsFunc(roles, func(r agentdef.Role) bool { return r.Name == role }) {
+			return fmt.Errorf("workflow %s has no role %q to cast", t.owner, role)
 		}
-		out = append(out, map[string]any{"name": name, "description": def.Value.Description})
 	}
-	return out, nil
+	t.players, t.group = map[string][]string{}, nil
+	for _, role := range roles {
+		players, given := cast[role.Name]
+		if !given {
+			players = t.declaredPlayers(role)
+		}
+		for _, name := range players {
+			if _, ok := bundle.Lookup(t.catalog, agentdef.AgentKind, name); !ok {
+				return fmt.Errorf("the cast puts %q in the role %q, and no agent of that name is installed", name, role.Name)
+			}
+			if !slices.Contains(t.group, name) {
+				t.group = append(t.group, name)
+			}
+		}
+		t.players[role.Name] = slices.Clone(players)
+	}
+	return nil
+}
+
+// declaredPlayers are the agents that play role when a turn casts none:
+// every installed agent but the workflow's own for a role of every seat,
+// else the agent it names.
+func (t *chatTurn) declaredPlayers(role agentdef.Role) []string {
+	if role.Seats == agentdef.SeatsAll {
+		var out []string
+		for _, def := range bundle.All(t.catalog, agentdef.AgentKind) {
+			if def.Owner.ID != t.owner {
+				out = append(out, def.Value.Name)
+			}
+		}
+		return out
+	}
+	if role.Agent != "" {
+		return []string{role.Agent}
+	}
+	return nil
+}
+
+// castInput is the cast as the workflow reads it, input.cast: by role,
+// each agent in its seats with its name and description.
+func (t *chatTurn) castInput() map[string]any {
+	out := map[string]any{}
+	for role, players := range t.players {
+		seats := make([]any, 0, len(players))
+		for _, name := range players {
+			def, _ := bundle.Lookup(t.catalog, agentdef.AgentKind, name)
+			seats = append(seats, map[string]any{"name": name, "description": def.Value.Description})
+		}
+		out[role] = seats
+	}
+	return out
 }
 
 // A chat workflow orchestrates agent calls. Its roles share the turn's
@@ -95,7 +146,10 @@ func runChat(ctx context.Context, h *host.Host, name string, spec host.ExecSpec,
 	}
 	_, _ = h.Defs().Reload(ctx)
 	t := &chatTurn{interactive: true, spec: spec, catalog: h.Defs().Catalog()}
-	t.spec.Group = nil // each role is given the roster as its group (run)
+	// The group, the cast and the settings are this workflow's: the
+	// agents it runs are given the group it casts (run), and don't
+	// inherit the rest.
+	t.spec.Group, t.spec.Cast, t.spec.Settings = nil, nil, nil
 	wf := &agentdef.Workflow{Name: "agent-turn"}
 	src := defs.AgentTurn()
 	input := map[string]any{"message": spec.Task}
@@ -111,20 +165,21 @@ func runChat(ctx context.Context, h *host.Host, name string, spec host.ExecSpec,
 			agent = spec.Def.Name
 		}
 		input["agent"] = agent
-	}
-	switch {
-	case wf.TakesRoster():
-		if len(spec.Group) == 0 {
-			return host.Result{}, fmt.Errorf("chat workflow %q runs the agents each turn names, and this turn names none", wf.Name)
+		if len(spec.Cast) > 0 || len(spec.Settings) > 0 {
+			return host.Result{}, fmt.Errorf("a turn of one agent takes no cast and no settings")
 		}
-		t.roster = slices.Clone(spec.Group)
-		roster, err := t.rosterInput()
-		if err != nil {
+	}
+	if wf.Chat {
+		if err := t.castRoles(wf.ChatRoles(t.catalog, t.owner), spec.Cast); err != nil {
 			return host.Result{}, err
 		}
-		input["roster"] = roster
-	case len(spec.Group) > 0:
-		return host.Result{}, fmt.Errorf("chat workflow %q does not take a roster", wf.Name)
+		input["cast"] = t.castInput()
+	}
+	for field, value := range spec.Settings {
+		if field == "message" || field == "cast" {
+			return host.Result{}, fmt.Errorf("chat workflow %q: a setting can't be its %s, which each turn gives it", wf.Name, field)
+		}
+		input[field] = value
 	}
 	out, err := executeScoped(ctx, h, wf, src, input, Options{chat: t}, invoke)
 	t.mu.Lock()
@@ -186,25 +241,30 @@ func chatSpec(_ *exec, _ *starlark.Thread, args starlark.Tuple, kwargs []starlar
 	return chatArgs("spec", args, kwargs)
 }
 
-// role requires that the turn may run the agent name: one of the
-// workflow's own bundle, or, for a roster workflow, one the roster names.
-func (t *chatTurn) role(name string) error {
-	if role, ok := bundle.Lookup(t.catalog, agentdef.AgentKind, name); ok && role.Owner.ID == t.owner {
-		return nil
+// player is the agent the workflow runs when it calls name: the first
+// agent cast in the role of that name, else an agent cast in any role, or
+// one of the workflow's own bundle.
+func (t *chatTurn) player(name string) (string, error) {
+	if players, ok := t.players[name]; ok {
+		if len(players) == 0 {
+			return "", fmt.Errorf("no agent plays the role %q of workflow %s this turn", name, t.owner)
+		}
+		return players[0], nil
 	}
-	if slices.Contains(t.roster, name) {
-		return nil
+	if slices.Contains(t.group, name) {
+		return name, nil
 	}
-	if t.roster != nil {
-		return fmt.Errorf("workflow %s does not own chat role %q, and this turn's roster does not name it", t.owner, name)
+	if def, ok := bundle.Lookup(t.catalog, agentdef.AgentKind, name); ok && def.Owner.ID == t.owner {
+		return name, nil
 	}
-	return fmt.Errorf("workflow %s does not own chat role %q", t.owner, name)
+	return "", fmt.Errorf("workflow %s has no role %q, and no agent of that name is cast this turn", t.owner, name)
 }
 
 func (t *chatTurn) run(ctx context.Context, sv *specValue, invoke host.NodeRunner, layers []config.Layer) map[string]any {
 	t.mu.Lock()
+	agent := sv.name
 	if t.err == nil && t.owner != "" {
-		t.err = t.role(sv.name)
+		agent, t.err = t.player(sv.name)
 	}
 	if t.err != nil {
 		defer t.mu.Unlock()
@@ -212,10 +272,12 @@ func (t *chatTurn) run(ctx context.Context, sv *specValue, invoke host.NodeRunne
 	}
 	spec := t.spec
 	if t.owner != "" {
-		// The workflow's own roles are its authored chat loops; a roster
-		// agent runs as its bundle wrote it.
-		spec.Name, spec.Def, spec.LocalBehavior = sv.name, nil, !slices.Contains(t.roster, sv.name)
-		spec.Thread = host.MemberThread(spec.Thread, sv.name)
+		// The workflow's own agents are its authored chat loops; an agent
+		// of another bundle runs as that bundle wrote it. Each keeps its
+		// own thread in the chat, whichever role it plays.
+		def, _ := bundle.Lookup(t.catalog, agentdef.AgentKind, agent)
+		spec.Name, spec.Def, spec.LocalBehavior = agent, nil, def.Owner.ID == t.owner
+		spec.Thread = host.MemberThread(spec.Thread, agent)
 	}
 	t.calls++
 	t.mu.Unlock()
@@ -223,9 +285,8 @@ func (t *chatTurn) run(ctx context.Context, sv *specValue, invoke host.NodeRunne
 	spec.Task = sv.task
 	spec.Layers = append(slices.Clone(spec.Layers), layers...)
 	spec.DefinitionCatalog = t.catalog
-	spec.Group = t.roster
-	if len(t.roster) > 0 {
-		spec.GroupThread = t.spec.Thread
+	if len(t.group) > 1 {
+		spec.Group, spec.GroupThread = t.group, t.spec.Thread
 	}
 	if len(sv.output) > 0 {
 		spec.Output = append(json.RawMessage(nil), sv.output...)

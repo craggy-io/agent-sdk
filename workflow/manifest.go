@@ -81,15 +81,15 @@ func (v *manifestValue) Hash() (uint32, error) { return 0, fmt.Errorf("unhashabl
 // workflowBuiltin implements workflow(description, input, agents,
 // profiles, limits) at file scope (§6.1).
 func workflowBuiltin(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var desc, roles string
+	var desc string
 	var chat bool
-	var inputV, agentsV, profilesV, limitsV, triggersV starlark.Value
+	var inputV, agentsV, profilesV, limitsV, triggersV, rolesV starlark.Value
 	if err := starlark.UnpackArgs("workflow", args, kwargs,
 		"description?", &desc, "input?", &inputV, "agents?", &agentsV,
-		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV, "chat?", &chat, "roles?", &roles); err != nil {
+		"profiles?", &profilesV, "limits?", &limitsV, "triggers?", &triggersV, "chat?", &chat, "roles?", &rolesV); err != nil {
 		return nil, err
 	}
-	if err := agentdef.CheckRoles(roles, chat); err != nil {
+	if _, err := agentdef.ParseRoles(rolesV, chat); err != nil {
 		return nil, err
 	}
 	if err := validateDispatch(thread, chat, triggersV); err != nil {

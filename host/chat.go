@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/internal/flowbridge"
@@ -51,13 +50,6 @@ func (s *Host) RunChat(ctx context.Context, workflow, message string, opts ...Ru
 		opt(&spec)
 	}
 	return s.runChat(ctx, workflow, spec)
-}
-
-// WithGroup lets the run, and every agent it starts, call the named
-// agents (ExecSpec.Group). A chat workflow declared roles = "roster"
-// takes them as the turn's roster; any other refuses a group.
-func WithGroup(names ...string) RunOption {
-	return func(s *ExecSpec) { s.Group = slices.Clone(names) }
 }
 
 // WithLocalCalls observes tool requests and results from authored chat loops.

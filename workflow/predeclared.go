@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"github.com/craggy-io/agent-sdk/agentdef"
 	scriptschema "github.com/craggy-io/script-services/schema"
 	"github.com/craggy-io/script-services/triggercompile"
 	"go.starlark.net/starlark"
@@ -24,6 +25,7 @@ func predeclared(e *exec) starlark.StringDict {
 	pre := starlark.StringDict{
 		"workflow":     starlark.NewBuiltin("workflow", workflowBuiltin),
 		"schema":       scriptschema.Module(),
+		"role":         agentdef.RoleBuiltin(),
 		"agent":        b("agent", builtinAgent),
 		"spec":         b("spec", builtinSpec),
 		"start":        b("start", builtinStart),
@@ -54,7 +56,7 @@ func predeclared(e *exec) starlark.StringDict {
 	if e.chat != nil {
 		// A chat turn runs its roles, one after another or side by side,
 		// and composes their text.
-		return starlark.StringDict{"workflow": pre["workflow"], "schema": pre["schema"], "agent": b("agent", chatAgent),
+		return starlark.StringDict{"workflow": pre["workflow"], "role": pre["role"], "schema": pre["schema"], "agent": b("agent", chatAgent),
 			"spec": b("spec", chatSpec), "parallel": pre["parallel"], "render": pre["render"], "json": pre["json"]}
 	}
 	return pre
