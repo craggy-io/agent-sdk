@@ -71,6 +71,12 @@ runs as that bundle wrote it.
 input fields (anything but `message` and `cast`), checked against its
 `input` schema: a host keeps them per chat as the workflow's settings.
 
+A chat workflow whose `run` only hands the message to one agent
+(`return agent("name", task = input.message)`, no settings, at most that
+agent's one seat) is a one-to-one chat with that agent:
+`Workflow.Delegate` names the agent, so a host can list the one in place
+of the other.
+
 Every agent the turn runs may call the agents cast in its roles as
 subagents (`agent`, `agent_spawn`, told whom it may call), and so may the
 agents they start. Each agent keeps its own thread in the chat
