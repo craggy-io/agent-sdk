@@ -19,6 +19,7 @@ Use this guide when editing this repository or integrating its Go module,
 | Durable multi-agent workflows in Starlark | [workflow](docs/workflow.md) |
 | Durable memory for agents and scripts | [memory](docs/memory.md) |
 | Expose agents/workflows/LLM/memory as capabilities | [agentcap](docs/agentcap.md) |
+| Which model each tier uses, and what models and cloud resources cost | [pricesheet](docs/pricesheet.md) |
 | Fake a provider in tests | [agenttest](docs/agenttest.md) |
 | Inspect a trace database from a shell | [craggy-agent](docs/cli.md) |
 

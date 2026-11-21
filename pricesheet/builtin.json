@@ -1,0 +1,20 @@
+{
+  "format": "craggy.prices@1",
+  "version": 0,
+  "published": "2026-11-21T00:00:00Z",
+  "models": {
+    "low": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
+    "med": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
+    "high": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
+    "embed": {"id": "openai/text-embedding-3-small", "title": "Embeddings (small)", "in_usd_per_m": 0.02, "out_usd_per_m": 0, "pinned": true}
+  },
+  "costs": {
+    "gcp.run.vcpu_second": {"usd": 0.000024, "unit": "vCPU-second", "source": "gcp", "as_of": "2026-11-21T00:00:00Z"},
+    "gcp.run.gib_second": {"usd": 0.0000025, "unit": "GiB-second", "source": "gcp", "as_of": "2026-11-21T00:00:00Z"},
+    "gcp.gcs.standard_gib_month": {"usd": 0.020, "unit": "GiB-month", "source": "gcp", "as_of": "2026-11-21T00:00:00Z"},
+    "gcp.egress.internet_gib": {"usd": 0.12, "unit": "GiB", "source": "manual", "as_of": "2026-11-21T00:00:00Z"},
+    "cloudflare.r2.gib_month": {"usd": 0.015, "unit": "GiB-month", "source": "manual", "as_of": "2026-11-21T00:00:00Z"},
+    "cloudflare.workers.million_requests": {"usd": 0.30, "unit": "million requests", "source": "manual", "as_of": "2026-11-21T00:00:00Z"},
+    "fx.gbp": {"usd": 1.20, "unit": "GBP", "source": "manual", "as_of": "2026-11-21T00:00:00Z"}
+  }
+}

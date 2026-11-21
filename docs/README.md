@@ -18,6 +18,7 @@ Per-package guides. Start with the [README](../README.md) quick start and
 | [workflow](workflow.md) | Durable Starlark workflows |
 | [memory](memory.md) | Durable memory store and capabilities |
 | [agentcap](agentcap.md) | Capability bridge and runtime registration |
+| [pricesheet](pricesheet.md) | Model tiers and prices from the signed price sheet |
 | [agenttest](agenttest.md) | Scripted and chaos providers |
 | [cli](cli.md) | `craggy-agent` debug CLI |
 | [host-example](host-example.md) | `examples/host`: HTTP/MCP host wiring the whole stack |

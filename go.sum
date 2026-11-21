@@ -6,6 +6,8 @@ github.com/craggy-io/foundation-kit v0.0.0-20261111155413-cf1591268b33 h1:InJ5bg
 github.com/craggy-io/foundation-kit v0.0.0-20261111155413-cf1591268b33/go.mod h1:grT6r7EVfoxyZ6/GiQuocUvqLOCAsMSh5oOwdzwuHdg=
 github.com/craggy-io/foundation-kit v0.0.0-20261116105501-654f585a41ed h1:Bg7GD9F7nIRBV/oxmC71ce4cjJ3pMi1xHMjpA+LjKxg=
 github.com/craggy-io/foundation-kit v0.0.0-20261116105501-654f585a41ed/go.mod h1:grT6r7EVfoxyZ6/GiQuocUvqLOCAsMSh5oOwdzwuHdg=
+github.com/craggy-io/foundation-kit v0.0.0-20261120230152-e82619ff64b3 h1:yBtH8UajgKornGiqJRoOm04JwvKgxn4pCEYpFPCKsS0=
+github.com/craggy-io/foundation-kit v0.0.0-20261120230152-e82619ff64b3/go.mod h1:grT6r7EVfoxyZ6/GiQuocUvqLOCAsMSh5oOwdzwuHdg=
 github.com/craggy-io/script-services v0.1.1-0.20261107163800-8eb4b015c1aa h1:oVGyxZBe4sNAWBfuwrFkTOyuTqK9r4oG8iAYy6frvNQ=
 github.com/craggy-io/script-services v0.1.1-0.20261107163800-8eb4b015c1aa/go.mod h1:CjD38mtublr2hnK23WlbPU5ZaG14vk+RV98m0x6Cgro=
 github.com/craggy-io/script-services v0.1.1-0.20261116105526-a5a6e2565939 h1:e+6cJ2gVi3ZHdjyXT7Bt6B1OptSp/YAxWt7UY9TCNmw=
