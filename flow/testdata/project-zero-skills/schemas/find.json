@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "slug": {"type": "string", "description": "kebab-case name of the technique"},
+    "name": {"type": "string"},
+    "summary": {"type": "string"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "required": ["slug", "name", "summary", "confidence"]
+}

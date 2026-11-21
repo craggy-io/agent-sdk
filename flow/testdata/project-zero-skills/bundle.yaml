@@ -1,0 +1,4 @@
+apiVersion: craggy.io/bundle/v1
+metadata: {id: craggy.studio.project-zero-skills, version: 1.0.0}
+contributions:
+  - {id: pipeline, kind: studio.pipeline@1, path: pipeline.star}

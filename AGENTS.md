@@ -17,6 +17,7 @@ Use this guide when editing this repository or integrating its Go module,
 | Load YAML and Starlark agent definitions | [agentdef](docs/agentdef.md) |
 | Own threads, runs, peers, events | [host](docs/host.md) |
 | Durable multi-agent workflows in Starlark | [workflow](docs/workflow.md) |
+| Pipelines as a flow of steps over capabilities: read, edit, check; the `@craggy/flow.star` library | [flow](docs/flow.md) |
 | Durable memory for agents and scripts | [memory](docs/memory.md) |
 | Expose agents/workflows/LLM/memory as capabilities | [agentcap](docs/agentcap.md) |
 | Which model each tier uses, and what models and cloud resources cost | [pricesheet](docs/pricesheet.md) |

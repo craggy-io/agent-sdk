@@ -46,6 +46,14 @@ func TestArchitecture(t *testing.T) {
 			// loop also imports config and internal/jschema today. The rule
 			// doesn't order loop and agentdef, so neither is kept from the
 			// other here.
+			{
+				// flow reads, edits and checks pipelines; hosts run them.
+				Name:   "flow imports nothing else from this module",
+				Why:    "flow describes pipelines for any host and runs nothing itself (docs/flow.md); a host wires it to its own runner",
+				From:   []string{"./flow"},
+				Forbid: []string{"./..."},
+				Allow:  []string{"./flow"},
+			},
 			below("loop sits below host",
 				[]string{"./loop"}, "./host", "./workflow", "./agentcap"),
 			below("agentdef sits below host",

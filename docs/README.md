@@ -16,6 +16,7 @@ Per-package guides. Start with the [README](../README.md) quick start and
 | [defs](defs.md) | The shipped definition bundles |
 | [host](host.md) | Runtime: threads, peers, events, budgets |
 | [workflow](workflow.md) | Durable Starlark workflows |
+| [flow](flow.md) | Pipelines as a flow of steps: read, edit, check, and the flow.star library |
 | [memory](memory.md) | Durable memory store and capabilities |
 | [agentcap](agentcap.md) | Capability bridge and runtime registration |
 | [pricesheet](pricesheet.md) | Model tiers and prices from the signed price sheet |
