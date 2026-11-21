@@ -185,6 +185,25 @@ func TestACallStepIsChecked(t *testing.T) {
 	}
 }
 
+func TestReads(t *testing.T) {
+	fl, err := flow.ReadFlow([]byte(`STEPS = [
+    flow.save(id = "s", path = "skills/{skill.slug}/{lang}.md", text = "text"),
+    flow.call(id = "c", capability = "a.b@1", bind = {"y": "post.url", "x": "doc"}, out = "z"),
+    flow.ask(id = "a", prompt = "p.md", input = "post", out = "answer"),
+]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range fl.Steps {
+		got = append(got, strings.Join(s.Reads(), ","))
+	}
+	if strings.Join(got, " ") != "skill,lang,text doc,post post" {
+		t.Fatalf("reads = %v", got)
+	}
+}
+
 func TestReadEvent(t *testing.T) {
 	ev, ok := flow.ReadEvent(`flow:{"step":"find","item":2,"keys":["a"]}`)
 	if !ok || ev.Step != "find" || *ev.Item != 2 || ev.Keys[0] != "a" {

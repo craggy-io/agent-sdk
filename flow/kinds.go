@@ -3,6 +3,7 @@ package flow
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Param is one argument of a step kind, in the order flow.star declares it.
@@ -127,4 +128,50 @@ func CheckRef(ref string) error {
 		return fmt.Errorf("%q isn't a capability reference such as artifacts.get@1", ref)
 	}
 	return nil
+}
+
+// Reads are the variables a step reads, each by its root name ("skill" for
+// skill.slug), in the order of its kind's parameters: its var parameters
+// but its output, the names in a template's {braces}, and what a call
+// step binds. A For each's own steps are not included.
+func (s *Step) Reads() []string {
+	var out []string
+	add := func(ref string) {
+		root, _, _ := strings.Cut(strings.TrimSpace(ref), ".")
+		if root != "" && !contains(out, root) {
+			out = append(out, root)
+		}
+	}
+	k, _ := KindOf(s.Kind)
+	for _, p := range k.Params {
+		v, ok := s.Get(p.Name)
+		if !ok {
+			continue
+		}
+		switch p.Type {
+		case "var":
+			if p.Name != "out" {
+				str, _ := v.(string)
+				add(str)
+			}
+		case "template":
+			str, _ := v.(string)
+			for {
+				i := strings.Index(str, "{")
+				j := strings.Index(str, "}")
+				if i < 0 || j < i {
+					break
+				}
+				add(str[i+1 : j])
+				str = str[j+1:]
+			}
+		case "binds":
+			binds, _ := v.(map[string]any)
+			for _, name := range sortedKeys(binds) {
+				ref, _ := binds[name].(string)
+				add(ref)
+			}
+		}
+	}
+	return out
 }

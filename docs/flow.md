@@ -28,7 +28,8 @@ problems := flow.Validate(b, flow.Env{Host: "Craggy Studio", Served: served, For
   A file with no `STEPS` is a hand-written `run()`.
 - `Kinds` are the step kinds with their parameters, in `flow.star`'s
   order: read, for_each, agent, ask, embed, keep_if, group, sort, save,
-  call, code. `Step.Calls` is the capability a step calls.
+  call, code. `Step.Calls` is the capability a step calls, `Step.Reads`
+  the variables it reads, and `Step.Line` where it is written.
 - `call` calls any capability the host serves: `args` are fixed
   arguments and `bind` maps argument names to variables of earlier steps
   (`{"id": "post.url"}`). A host's step menu offers every capability this

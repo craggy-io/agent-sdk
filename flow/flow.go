@@ -20,6 +20,9 @@ import (
 type Step struct {
 	Kind string
 	Args []Arg
+	// Line is where the step is written in pipeline.star, from 1; 0 for a
+	// step that came as JSON.
+	Line int
 }
 
 // Arg is one keyword argument. Value is a string, int64, float64, bool, nil,
@@ -164,7 +167,8 @@ func readStep(e syntax.Expr) (*Step, error) {
 	if x, ok := dot.X.(*syntax.Ident); !ok || x.Name != "flow" {
 		return nil, posErr(e, "each step must be a flow.<kind>(...) call")
 	}
-	s := &Step{Kind: dot.Name.Name}
+	start, _ := call.Span()
+	s := &Step{Kind: dot.Name.Name, Line: int(start.Line)}
 	if _, ok := KindOf(s.Kind); !ok {
 		return nil, posErr(e, "unknown step kind flow.%s", s.Kind)
 	}

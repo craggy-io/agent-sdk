@@ -30,6 +30,9 @@ func TestReferencePipelinesRoundTripByteForByte(t *testing.T) {
 		if !fl.HasSteps() || len(fl.Steps) == 0 {
 			t.Fatalf("%s: no steps", name)
 		}
+		if fl.Steps[0].Line != 11 || fl.Steps[1].Steps()[0].Line != 17 {
+			t.Fatalf("%s: lines %d, %d", name, fl.Steps[0].Line, fl.Steps[1].Steps()[0].Line)
+		}
 		if got := string(fl.Source(fl.Steps)); got != string(src) {
 			t.Fatalf("%s: written back differently:\n%s", name, got)
 		}
