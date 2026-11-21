@@ -204,6 +204,22 @@ func TestReads(t *testing.T) {
 	}
 }
 
+// An editor holding only pipeline.star checks it without the files its
+// steps name.
+func TestSourceOnly(t *testing.T) {
+	b, err := flow.ReadDir("testdata/project-zero-skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := flow.Bundle{flow.FileName: b[flow.FileName]}
+	if probs := flow.Validate(only, flow.Env{SourceOnly: true}); len(probs) > 0 {
+		t.Fatalf("source only: %v", probs)
+	}
+	if probs := flow.Validate(only, flow.Env{}); len(probs) == 0 {
+		t.Fatal("the missing prompts went unseen")
+	}
+}
+
 func TestReadEvent(t *testing.T) {
 	ev, ok := flow.ReadEvent(`flow:{"step":"find","item":2,"keys":["a"]}`)
 	if !ok || ev.Step != "find" || *ev.Item != 2 || ev.Keys[0] != "a" {

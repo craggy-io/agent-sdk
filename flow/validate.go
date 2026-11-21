@@ -25,6 +25,9 @@ type Env struct {
 	Model func(id string) (maxOutput int, ok bool)
 	// Dataset reports a craggy-data dataset that exists.
 	Dataset func(name string) bool
+	// SourceOnly checks pipeline.star alone, as an editor holding only
+	// the source does: the files a step names are not looked for.
+	SourceOnly bool
 }
 
 // Problem is one thing wrong with a pipeline. Validation is free and runs on
@@ -137,7 +140,7 @@ func Validate(b Bundle, env Env) []Problem {
 						add(FileName, id, "reads %s, which no earlier step makes", str)
 					}
 				case "file":
-					if str == "" {
+					if str == "" || env.SourceOnly {
 						break
 					}
 					text, ok := b[str]
