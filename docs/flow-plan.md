@@ -99,4 +99,14 @@ flow.call(id = "fetch", capability = "artifacts.get@1", args = {"kind": "note"},
 
 ## 6. Status
 
-Being built.
+Built 2026-11-21, both apps cut over and the copies deleted:
+
+- agent-sdk 818aa04: `flow` with the `call` kind, `Env` host rules,
+  `flow.Lib`, events and test inputs.
+- craggy-studio 451a825: `src/pipeline` and `res/lib/flow.star` gone;
+  runs, catalog and the Flow tab use `flow` (a capability picker for
+  `call`). 54fb68d lists the harness's new `core.pipelines.*`.
+- craggy-harness 7429f72: `pipelines` reads, runs and builds with
+  `flow`; `core.pipelines.kinds`, `read`, `edit` and `create`;
+  `core.scripts.describe` with `kind: pipeline` draws one. No Pipelines
+  page yet.
