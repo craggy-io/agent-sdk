@@ -221,6 +221,7 @@ type exec struct {
 	wf      *agentdef.Workflow // catalogued name ("" for ad-hoc source) and script (nil Unit when not catalogued)
 	source  string
 	runID   string // workflow run ID (journal scope)
+	thread  string // the thread an agent() that names none runs on ("" = the host's choice)
 	nodeID  string // workflow node ID in the trace
 	path    string // journal node path
 	resume  bool
@@ -294,6 +295,14 @@ func executeScoped(ctx context.Context, s *host.Host, wf *agentdef.Workflow, sou
 		if rid, ok := host.RunIDFromContext(ctx); ok && opts.NodePath == "" {
 			e.runID = rid
 		}
+	}
+	// A run started outside any agent is a conversation of its own: its
+	// agents share one thread, named after the run so that a resume
+	// carries it on, and never the host's primary thread, which another
+	// run would read too. A run inside an agent leaves it to the host,
+	// whose delegated agents start fresh.
+	if _, inRun := host.RunIDFromContext(ctx); !inRun {
+		e.thread = "workflow:" + e.runID
 	}
 	if e.chat == nil && wf.Chat {
 		var err error

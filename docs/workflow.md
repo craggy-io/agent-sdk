@@ -34,6 +34,12 @@ workflow's tool view), `spawn`/`send`/`interrupt`/`resume`/`close`/
 `status`/`list_agents`, plus `phase`, `log`, `budget`, `config`,
 `render`, `json`, `schema`.
 
+Threads: an `agent` call that names no `thread=` runs on its run's own
+thread, `workflow:<run ID>`, which every agent of the run shares and a
+resume carries on; another run never reads it. A `thread=` the script
+names is carried on across runs. A workflow run inside an agent leaves
+the choice to the host, whose delegated agents start fresh.
+
 Resume replays the journal (see design §6): completed calls return
 recorded values, ask answers persist, and operations with unknown
 outcomes block until `ResolveRecovery`. `ListWaiting` rebuilds

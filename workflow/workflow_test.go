@@ -27,6 +27,7 @@ type taskProvider struct {
 	tools   [][]string
 	failOn  string // substring -> fatal provider error
 	systems []string
+	reqs    []model.Request
 }
 
 func (p *taskProvider) Sample(_ context.Context, req model.Request, _ func(model.Delta)) (model.Response, error) {
@@ -47,6 +48,7 @@ func (p *taskProvider) Sample(_ context.Context, req model.Request, _ func(model
 	p.calls = append(p.calls, task)
 	p.tools = append(p.tools, names)
 	p.systems = append(p.systems, system)
+	p.reqs = append(p.reqs, model.Request{Items: append([]model.Item(nil), req.Items...)})
 	fail := p.failOn != "" && strings.Contains(task, p.failOn)
 	p.mu.Unlock()
 	if fail {
@@ -73,6 +75,12 @@ func (p *taskProvider) Sample(_ context.Context, req model.Request, _ func(model
 
 func (p *taskProvider) Model(_ context.Context, id string) (model.ModelInfo, error) {
 	return model.ModelInfo{ID: id, ContextWindow: 128000}, nil
+}
+
+func (p *taskProvider) requests() []model.Request {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]model.Request(nil), p.reqs...)
 }
 
 func (p *taskProvider) count(contains string) int {

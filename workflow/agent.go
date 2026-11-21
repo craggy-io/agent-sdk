@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,7 @@ func (e *exec) runSpec(ctx context.Context, sv *specValue) map[string]any {
 }
 
 func (e *exec) runWorkflowAgent(ctx context.Context, sv *specValue, name string) map[string]any {
-	spec := host.ExecSpec{Task: sv.task, Profile: sv.profile, Thread: sv.thread}
+	spec := host.ExecSpec{Task: sv.task, Profile: sv.profile, Thread: cmp.Or(sv.thread, e.thread)}
 	if sv.defn != nil {
 		cp := *sv.defn
 		spec.Def = &cp
