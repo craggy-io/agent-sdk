@@ -20,6 +20,10 @@ def _input(dataset, key, where = "", recipe = "", params = None, limit = 0):
     """A named source: a craggy-data dataset read with a filter or a managed query."""
     return {"dataset": dataset, "key": key, "where": where, "recipe": recipe, "params": params or {}, "limit": limit}
 
+def _param(type, label = "", default = None):
+    """A named value the run is given: a lab, some text, an artifact."""
+    return {"type": type, "label": label, "default": default}
+
 def _step(kind, id, title, **fields):
     s = {"kind": kind, "id": id, "title": title}
     s.update(fields)
@@ -31,8 +35,14 @@ def _read(id, input, out = "", title = ""):
 def _for_each(id, over, item, steps, title = ""):
     return _step("for_each", id, title, over = over, item = item, steps = steps)
 
-def _agent(id, prompt, input, out, title = "", model = "med", schema = "", many = False, budget = 200, max_turns = 8):
-    return _step("agent", id, title, prompt = prompt, input = input, out = out, model = model, schema = schema, many = many, budget = budget, max_turns = max_turns)
+def _agent(id, prompt, input, out, title = "", agent = "", model = "med", schema = "", many = False, budget = 200, max_turns = 8):
+    return _step("agent", id, title, agent = agent, prompt = prompt, input = input, out = out, model = model, schema = schema, many = many, budget = budget, max_turns = max_turns)
+
+def _workflow(id, workflow, out, input = "", title = ""):
+    return _step("workflow", id, title, workflow = workflow, input = input, out = out)
+
+def _approve(id, prompt, show = "", title = ""):
+    return _step("approve", id, title, prompt = prompt, show = show)
 
 def _ask(id, prompt, input, out, title = "", model = "low", schema = "", many = False, max_tokens = 2000):
     return _step("ask", id, title, prompt = prompt, input = input, out = out, model = model, schema = schema, many = many, max_tokens = max_tokens)
@@ -163,18 +173,17 @@ def _ask_run(ctx, s, env):
 
 def _agent_run(ctx, s, env):
     data = _get(env, s["input"])
-    res = call(
-        "core.workflows.run@1",
-        workflow = "studio.agent",
-        input = {
-            "instructions": _prompt(ctx, s) + "\n\n" + _UNTRUSTED,
-            "data": data,
-            "schema": _schema_text(ctx, s),
-            "model": s["model"],
-            "budget": s["budget"],
-            "max_turns": s["max_turns"],
-        },
-    )
+    given = {
+        "instructions": _prompt(ctx, s) + "\n\n" + _UNTRUSTED,
+        "data": data,
+        "schema": _schema_text(ctx, s),
+        "model": s["model"],
+        "budget": s["budget"],
+        "max_turns": s["max_turns"],
+    }
+    if s.get("agent"):
+        given["agent"] = s["agent"]
+    res = call("core.workflows.run@1", workflow = "studio.agent", input = given)
     if res["status"] != "done":
         fail("step %s: the agent stopped: %s" % (s["id"], res.get("error", res["status"])))
     if not s.get("schema"):
@@ -242,6 +251,22 @@ def _embed_run(s, env):
         out.append(e)
     return out
 
+def _workflow_run(s, env):
+    res = call(
+        "core.workflows.run@1",
+        workflow = s["workflow"],
+        input = _get(env, s["input"]) if s.get("input") else {},
+    )
+    if res["status"] != "done":
+        fail("step %s: the workflow stopped: %s" % (s["id"], res.get("error", res["status"])))
+    return res["value"]
+
+def _approve_run(s, env):
+    """Asks a person; the host holds the run until they answer. True goes on."""
+    shown = _get(env, s["show"]) if s.get("show") else None
+    res = call("core.pipelines.approve@1", step = s["id"], prompt = _render(s["prompt"], env), value = shown)
+    return res["yes"]
+
 def _call_run(s, env):
     params = dict(s["args"])
     for name, ref in s["bind"].items():
@@ -256,7 +281,7 @@ def _output(s):
     k = s["kind"]
     if k in ("keep_if", "sort"):
         return s["over"]
-    if k in ("read", "agent", "ask", "embed", "group", "code", "call"):
+    if k in ("read", "agent", "ask", "embed", "group", "code", "call", "workflow"):
         return s["out"]
     return ""
 
@@ -288,6 +313,10 @@ def _leaf(ctx, s, env, keys):
         return None
     if k == "call":
         return _tag(_call_run(s, env), keys)
+    if k == "workflow":
+        return _tag(_workflow_run(s, env), keys)
+    if k == "approve":
+        return _approve_run(s, env)
     if k == "code":
         return s["fn"](env)
     fail("unknown step kind %r" % k)
@@ -338,6 +367,9 @@ def _run(ctx, steps):
             continue
         _emit({"step": s["id"]})
         out = _leaf(ctx, s, env, [])
+        if s["kind"] == "approve" and not out:
+            _emit({"stopped": s["id"]})
+            break
         name = _output(s)
         if name:
             env[name] = out
@@ -346,9 +378,12 @@ def _run(ctx, steps):
 
 flow = struct(
     input = _input,
+    param = _param,
     read = _read,
     for_each = _for_each,
     agent = _agent,
+    workflow = _workflow,
+    approve = _approve,
     ask = _ask,
     embed = _embed,
     keep_if = _keep_if,

@@ -27,6 +27,8 @@ type Event struct {
 	Keys  []string `json:"keys,omitempty"`
 	Done  string   `json:"done,omitempty"`
 	Count int      `json:"count,omitempty"`
+	// Stopped is the approve step whose No ended the run.
+	Stopped string `json:"stopped,omitempty"`
 }
 
 // ReadEvent reads a line a run printed; ok is false for any other line.
@@ -54,20 +56,62 @@ func (b Bundle) Modules() map[string]string {
 	return out
 }
 
-// TestInputs are a test run's inputs, from InputsFile, in the order the
-// header declares them and keyed (Keyed).
+// TestInputs are a test run's dataset inputs, from InputsFile, in the order
+// the header declares them and keyed (Keyed). Value inputs are the run's
+// to give (Values).
 func TestInputs(b Bundle, h Header) (map[string][]map[string]any, error) {
+	out := map[string][]map[string]any{}
+	datasets := false
+	for _, name := range h.InputOrder {
+		datasets = datasets || !h.Inputs[name].IsValue()
+	}
+	if !datasets {
+		return out, nil
+	}
 	text, ok := b[InputsFile]
 	if !ok {
 		return nil, fmt.Errorf("flow: the pipeline has no %s", InputsFile)
 	}
-	var td map[string][]map[string]any
+	var td map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(text), &td); err != nil {
 		return nil, fmt.Errorf("flow: %s: %w", InputsFile, err)
 	}
-	out := map[string][]map[string]any{}
 	for _, name := range h.InputOrder {
-		out[name] = Keyed(td[name], h.Inputs[name].Key)
+		in := h.Inputs[name]
+		if in.IsValue() {
+			continue
+		}
+		var rows []map[string]any
+		if raw, ok := td[name]; ok {
+			if err := json.Unmarshal(raw, &rows); err != nil {
+				return nil, fmt.Errorf("flow: %s: %s: %w", InputsFile, name, err)
+			}
+		}
+		out[name] = Keyed(rows, in.Key)
+	}
+	return out, nil
+}
+
+// Values are a run's value inputs (flow.param): what it was given, else
+// each input's default. A value input with neither is an error, and so is
+// a value given for no value input.
+func Values(h Header, given map[string]any) (map[string]any, error) {
+	out := map[string]any{}
+	for name, v := range given {
+		if in, ok := h.Inputs[name]; !ok || !in.IsValue() {
+			return nil, fmt.Errorf("flow: %s isn't a value input of this pipeline", name)
+		}
+		out[name] = v
+	}
+	for _, name := range h.InputOrder {
+		in := h.Inputs[name]
+		if _, ok := out[name]; ok || !in.IsValue() {
+			continue
+		}
+		if in.Default == nil {
+			return nil, fmt.Errorf("flow: the run needs a value for %s", name)
+		}
+		out[name] = in.Default
 	}
 	return out, nil
 }

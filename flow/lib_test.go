@@ -24,7 +24,7 @@ type called struct {
 
 // run runs a bundle's run(ctx) over Lib with a call built-in that answers
 // with answer, and returns what it called and printed.
-func run(t *testing.T, b flow.Bundle, inputs map[string][]map[string]any, answer func(called) any) ([]called, []flow.Event, starlark.Value) {
+func run(t *testing.T, b flow.Bundle, inputs any, answer func(called) any) ([]called, []flow.Event, starlark.Value) {
 	t.Helper()
 	var calls []called
 	var events []flow.Event

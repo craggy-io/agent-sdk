@@ -10,7 +10,9 @@ import (
 type Param struct {
 	Name string `json:"name"`
 	// Type is string, var, file, model, number, bool, steps, template, op,
-	// any, fn, capability or binds (a dict of argument names to variables).
+	// any, fn, capability, binds (a dict of argument names to variables),
+	// agent (an installed agent's id) or workflow (an installed workflow's
+	// name).
 	Type     string `json:"type"`
 	Default  any    `json:"default,omitempty"`
 	Required bool   `json:"required,omitempty"`
@@ -45,20 +47,31 @@ var (
 // Call is the kind that calls any capability.
 const Call = "call"
 
+// Approve is the kind that stops a run until a person answers.
+const Approve = "approve"
+
+// ApproveRef is what an approve step calls: the host's answer to it. A
+// host that can't wait for a person doesn't serve it.
+const ApproveRef = "core.pipelines.approve@1"
+
 // Kinds are the step kinds, in the order an Add a step menu lists them.
 var Kinds = []Kind{
 	{Name: "read", Label: "Read data", Capability: "data.remote.sql@1", Tone: "info", Detail: "Rows of one of the pipeline's inputs.",
 		Params: []Param{idParam, titleParam, req("input", "string", "Input"), p("out", "var", "Output", "")}},
 	{Name: "for_each", Label: "For each", Tone: "neutral", Detail: "Repeats its steps for every item of a list.",
 		Params: []Param{idParam, titleParam, req("over", "var", "Over"), req("item", "string", "Item name"), req("steps", "steps", "Steps")}},
-	{Name: "agent", Label: "Agent", Capability: "core.workflows.run@1", Spends: true, Tone: "accent", Detail: "An agent with a prompt, returning structured output.",
-		Params: []Param{idParam, titleParam, req("prompt", "file", "Prompt"), req("input", "var", "Input"), req("out", "var", "Output"),
+	{Name: "agent", Label: "Agent", Capability: "core.workflows.run@1", Spends: true, Tone: "accent", Detail: "An agent with a prompt, returning structured output: one made for the step, or an installed agent with its own tools.",
+		Params: []Param{idParam, titleParam, p("agent", "agent", "Installed agent", ""), req("prompt", "file", "Prompt"), req("input", "var", "Input"), req("out", "var", "Output"),
 			p("model", "model", "Model", "med"), p("schema", "file", "Structured output", ""), p("many", "bool", "A list of them", false),
 			p("budget", "number", "Budget per item (credits)", int64(200)), p("max_turns", "number", "Turns at most", int64(8))}},
 	{Name: "ask", Label: "Ask a model", Capability: "core.models.complete@1", Spends: true, Tone: "accent", Detail: "One model call: text, or JSON matching a schema.",
 		Params: []Param{idParam, titleParam, req("prompt", "file", "Prompt"), req("input", "var", "Input"), req("out", "var", "Output"),
 			p("model", "model", "Model", "low"), p("schema", "file", "Structured output", ""), p("many", "bool", "A list of them", false),
 			p("max_tokens", "number", "Output tokens at most", int64(2000))}},
+	{Name: "workflow", Label: "Run a workflow", Capability: "core.workflows.run@1", Spends: true, Tone: "accent", Detail: "Runs an installed workflow with an earlier step's output as its input.",
+		Params: []Param{idParam, titleParam, req("workflow", "workflow", "Workflow"), p("input", "var", "Input", ""), req("out", "var", "Output")}},
+	{Name: Approve, Label: "Ask a person", Capability: ApproveRef, Tone: "warning", Detail: "Stops the run until a person answers: Yes goes on, No ends the run.",
+		Params: []Param{idParam, titleParam, req("prompt", "template", "Question"), p("show", "var", "Show them", "")}},
 	{Name: "embed", Label: "Embed", Capability: "core.models.embed@1", Spends: true, Tone: "accent", Detail: "Adds an embedding to each item.",
 		Params: []Param{idParam, titleParam, req("over", "var", "Over"), req("field", "string", "Field"), req("out", "var", "Output"), p("model", "model", "Model", "embed")}},
 	{Name: "keep_if", Label: "Keep if", Tone: "neutral", Detail: "Keeps the items whose field passes a test. Free.",
@@ -74,6 +87,33 @@ var Kinds = []Kind{
 			p("bind", "binds", "Arguments from steps", nil), p("out", "var", "Output", "")}},
 	{Name: "code", Label: "Code", Tone: "neutral", Detail: "A Starlark function from the Code tab.",
 		Params: []Param{idParam, titleParam, req("fn", "fn", "Function"), p("out", "var", "Output", "")}},
+}
+
+// Kinds are the step kinds a host's Add a step menu offers: those whose
+// capability it serves, a workflow step only where it has installed
+// workflows, and an agent step without its installed-agent choice where it
+// has no installed agents. A nil Served offers every capability.
+func (e Env) Kinds() []Kind {
+	var out []Kind
+	for _, k := range Kinds {
+		if k.Capability != "" && e.Served != nil && !e.Served(k.Capability) {
+			continue
+		}
+		if k.Name == "workflow" && e.Workflow == nil {
+			continue
+		}
+		if k.Name == "agent" && e.Agent == nil {
+			params := make([]Param, 0, len(k.Params))
+			for _, p := range k.Params {
+				if p.Type != "agent" {
+					params = append(params, p)
+				}
+			}
+			k.Params = params
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 // KindOf finds a step kind.
@@ -99,7 +139,7 @@ func (s *Step) Output() string {
 			return o
 		}
 		return s.String("input")
-	case "agent", "ask", "embed", "group", "code", Call:
+	case "agent", "ask", "embed", "group", "code", "workflow", Call:
 		return s.String("out")
 	}
 	return ""

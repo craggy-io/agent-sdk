@@ -28,6 +28,13 @@ type Env struct {
 	// SourceOnly checks pipeline.star alone, as an editor holding only
 	// the source does: the files a step names are not looked for.
 	SourceOnly bool
+	// Values is a host that gives a run value inputs (flow.param).
+	Values bool
+	// Agent reports an installed agent an agent step may name; a host
+	// without it takes none.
+	Agent func(id string) bool
+	// Workflow reports an installed workflow a workflow step may run.
+	Workflow func(name string) bool
 }
 
 // Problem is one thing wrong with a pipeline. Validation is free and runs on
@@ -97,6 +104,12 @@ func Validate(b Bundle, env Env) []Problem {
 	}
 	for _, name := range h.InputOrder {
 		in := h.Inputs[name]
+		if in.IsValue() {
+			if !env.Values {
+				add(FileName, "", "input %s is a value (flow.param), which %s doesn't give a run", name, host)
+			}
+			continue
+		}
 		if env.Dataset != nil && !env.Dataset(in.Dataset) {
 			add(FileName, "", "input %s reads %s, which craggy-data doesn't have", name, in.Dataset)
 		}
@@ -171,6 +184,19 @@ func Validate(b Bundle, env Env) []Problem {
 					if err := CheckRef(str); err != nil {
 						add(FileName, id, "%v", err)
 					}
+				case "agent":
+					if str == "" {
+						break
+					}
+					if env.Agent == nil {
+						add(FileName, id, "%s runs only agents made for the step, not installed ones", host)
+					} else if !env.Agent(str) {
+						add(FileName, id, "no installed agent %s", str)
+					}
+				case "workflow":
+					if env.Workflow != nil && !env.Workflow(str) {
+						add(FileName, id, "no installed workflow %s", str)
+					}
 				case "binds":
 					binds, ok := v.(map[string]any)
 					if !ok {
@@ -209,6 +235,9 @@ func Validate(b Bundle, env Env) []Problem {
 						add(FileName, id, "args must be a dict of argument names to values")
 					}
 				}
+			}
+			if s.Kind == Approve && inLoop {
+				add(FileName, id, "ask a person outside a For each: one question for the run")
 			}
 			if s.Kind == "for_each" {
 				if inLoop {

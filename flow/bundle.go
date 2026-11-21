@@ -135,10 +135,16 @@ func CheckPath(p string) error {
 	return nil
 }
 
-// Input is a named source a pipeline declares (flow.input).
+// Input is a named source a pipeline declares: rows of a craggy-data
+// dataset (flow.input), or one value the run is given (flow.param), which
+// has a Type and no Dataset.
 type Input struct {
-	Dataset string         `json:"dataset"`
-	Key     string         `json:"key"`
+	// Type is empty for a dataset, else one of ValueTypes.
+	Type    string         `json:"type,omitempty"`
+	Label   string         `json:"label,omitempty"`
+	Default any            `json:"default,omitempty"`
+	Dataset string         `json:"dataset,omitempty"`
+	Key     string         `json:"key,omitempty"`
 	Where   string         `json:"where,omitempty"`
 	Recipe  string         `json:"recipe,omitempty"`
 	Params  map[string]any `json:"params,omitempty"`
@@ -231,8 +237,11 @@ func header(call *syntax.CallExpr) (Header, error) {
 func readInput(e syntax.Expr) (Input, error) {
 	call, ok := e.(*syntax.CallExpr)
 	dot, _ := callDot(call)
+	if ok && dot == "flow.param" {
+		return readParam(call)
+	}
 	if !ok || dot != "flow.input" {
-		return Input{}, posErr(e, "an input must be flow.input(...)")
+		return Input{}, posErr(e, "an input must be flow.input(...) or flow.param(...)")
 	}
 	in := Input{}
 	for i, a := range call.Args {
@@ -271,6 +280,45 @@ func readInput(e syntax.Expr) (Input, error) {
 	}
 	if in.Dataset == "" || in.Key == "" {
 		return in, posErr(e, "flow.input needs a dataset and a key")
+	}
+	return in, nil
+}
+
+// ValueTypes are the types of a value input (flow.param): what the run is
+// given, and the picker a form shows for it.
+var ValueTypes = []string{"text", "number", "bool", "lab", "artifact", "artifacts", "json"}
+
+// IsValue reports an input that is one value, not a dataset's rows.
+func (in Input) IsValue() bool { return in.Type != "" }
+
+func readParam(call *syntax.CallExpr) (Input, error) {
+	in := Input{}
+	for i, a := range call.Args {
+		if bin, ok := a.(*syntax.BinaryExpr); ok && bin.Op == syntax.EQ {
+			v, err := literal(bin.Y)
+			if err != nil {
+				return in, err
+			}
+			switch bin.X.(*syntax.Ident).Name {
+			case "type":
+				in.Type, _ = v.(string)
+			case "label":
+				in.Label, _ = v.(string)
+			case "default":
+				in.Default = v
+			}
+			continue
+		}
+		v, err := literal(a)
+		if err != nil {
+			return in, err
+		}
+		if i == 0 {
+			in.Type, _ = v.(string)
+		}
+	}
+	if !contains(ValueTypes, in.Type) {
+		return in, posErr(call, "flow.param needs a type: one of %s", strings.Join(ValueTypes, ", "))
 	}
 	return in, nil
 }
@@ -357,6 +405,16 @@ func RenderHeader(h Header) string {
 }
 
 func renderInput(in Input) string {
+	if in.IsValue() {
+		s := "flow.param(" + quote(in.Type)
+		if in.Label != "" {
+			s += ", label = " + quote(in.Label)
+		}
+		if in.Default != nil {
+			s += ", default = " + renderValue(in.Default)
+		}
+		return s + ")"
+	}
 	s := "flow.input(" + quote(in.Dataset) + ", key = " + quote(in.Key)
 	if in.Where != "" {
 		s += ", where = " + quote(in.Where)
