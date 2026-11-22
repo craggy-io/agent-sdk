@@ -28,8 +28,17 @@ problems := flow.Validate(b, flow.Env{Host: "Craggy Studio", Served: served, For
   A file with no `STEPS` is a hand-written `run()`.
 - `Kinds` are the step kinds with their parameters, in `flow.star`'s
   order: read, for_each, agent, workflow, approve, ask, embed, keep_if,
-  group, sort, save, call, code. `Step.Calls` is the capability a step calls, `Step.Reads`
-  the variables it reads, and `Step.Line` where it is written.
+  group, sort, save, export, call, code. `Step.Calls` is the capability a step calls, `Step.Reads`
+  the variables it reads, and `Step.Line` where it is written. A `choice`
+  parameter is one of its `Options`.
+- `export` writes a list of items into the pack as one data file through
+  `core.packs.write@1`, in one of `Formats`: `json` (an array), `jsonl`,
+  `csv` (a header row, RFC 4180 quoting), `xml` (`<rows><row>`, a field
+  whose name isn't an XML name as `<field name="...">`) or `yaml`. Its
+  fields are those `fields` names, comma-separated, else every field the
+  items have in the order they first appear, leaving out those starting
+  with `_`. A nested value is written as JSON in its cell. Every item's
+  input key is a source of the file.
 - `call` calls any capability the host serves: `args` are fixed
   arguments and `bind` maps argument names to variables of earlier steps
   (`{"id": "post.url"}`). A host's step menu offers every capability this

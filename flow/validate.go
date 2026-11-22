@@ -176,6 +176,10 @@ func Validate(b Bundle, env Env) []Problem {
 					if !contains(Ops, str) {
 						add(FileName, id, "unknown test %q", str)
 					}
+				case "choice":
+					if !contains(p.Options, str) {
+						add(FileName, id, "%s is %q; it must be one of %s", p.Name, str, strings.Join(p.Options, ", "))
+					}
 				case "fn":
 					if r, ok := v.(Ref); !ok || fl.Functions[string(r)] == "" {
 						add(FileName, id, "fn must name a function defined in pipeline.star")

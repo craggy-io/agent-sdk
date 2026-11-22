@@ -62,6 +62,9 @@ def _sort(id, over, by, desc = False, title = ""):
 def _save(id, path, text, title = ""):
     return _step("save", id, title, path = path, text = text)
 
+def _export(id, over, path, format = "json", fields = "", title = ""):
+    return _step("export", id, title, over = over, format = format, path = path, fields = fields)
+
 def _call_step(id, capability, args = None, bind = None, out = "", title = ""):
     return _step("call", id, title, capability = capability, args = args or {}, bind = bind or {}, out = out)
 
@@ -276,6 +279,112 @@ def _call_run(s, env):
 def _save_run(s, env, keys):
     call("core.packs.write@1", path = _render(s["path"], env), text = _text(env, s["text"]), sources = keys)
 
+# --- export: a list of items as one data file ---
+
+def _rows(v):
+    """An export's rows: a list's items, or one item; a value that isn't a dict is {"value": v}."""
+    items = v if type(v) == "list" else [v]
+    return [i if type(i) == "dict" else {"value": i} for i in items]
+
+def _columns(s, rows):
+    """The fields named, else every field the rows have but those starting with _, in first-seen order."""
+    named = [f.strip() for f in s.get("fields", "").split(",") if f.strip()]
+    if named:
+        return named
+    cols = []
+    for r in rows:
+        for k in r:
+            if type(k) == "string" and not k.startswith("_") and k not in cols:
+                cols.append(k)
+    return cols
+
+def _scalar(v):
+    """A cell's text: strings as they are, none as empty, anything else as JSON."""
+    if v == None:
+        return ""
+    if type(v) == "string":
+        return v
+    return json.encode(v)
+
+def _csv_cell(v):
+    t = _scalar(v)
+    if t == "":
+        return t
+    if "," in t or '"' in t or "\n" in t or "\r" in t or t[0] == " " or t[-1] == " ":
+        return '"' + t.replace('"', '""') + '"'
+    return t
+
+_XML_CONTROL = [chr(i) for i in range(32) if i not in (9, 10, 13)]
+
+def _xml_text(v):
+    t = _scalar(v)
+    for c in _XML_CONTROL:
+        t = t.replace(c, "")
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+def _ident(name, extra):
+    """Whether name is a letter or _ and then letters, digits, _ or what extra holds."""
+    if name == "" or not (name[0].isalpha() or name[0] == "_"):
+        return False
+    for c in name.elems():
+        if not (c.isalnum() or c == "_" or c in extra):
+            return False
+    return True
+
+def _xml_field(name, v):
+    if _ident(name, "-.") and not name.lower().startswith("xml"):
+        return "<%s>%s</%s>" % (name, _xml_text(v), name)
+    return '<field name="%s">%s</field>' % (_xml_text(name), _xml_text(v))
+
+_YAML_WORDS = ["true", "false", "null", "yes", "no", "on", "off", "y", "n", "~"]
+
+def _yaml_key(k):
+    return k if _ident(k, "-") and k.lower() not in _YAML_WORDS else json.encode(k)
+
+def _lines(lines):
+    return "".join([l + "\n" for l in lines])
+
+def _object(r, cols):
+    """A row as a JSON object with its fields in column order (json.encode sorts them)."""
+    return "{" + ",".join([json.encode(c) + ":" + json.encode(r.get(c)) for c in cols]) + "}"
+
+def _encode(format, rows, cols):
+    if format == "json":
+        return json.indent("[" + ",".join([_object(r, cols) for r in rows]) + "]", indent = "  ") + "\n"
+    if format == "jsonl":
+        return _lines([_object(r, cols) for r in rows])
+    if format == "csv":
+        return _lines([",".join([_csv_cell(c) for c in cols])] + [",".join([_csv_cell(r.get(c)) for c in cols]) for r in rows])
+    if format == "xml":
+        out = ['<?xml version="1.0" encoding="UTF-8"?>', "<rows>"]
+        for r in rows:
+            out.append("  <row>")
+            out += ["    " + _xml_field(c, r.get(c)) for c in cols]
+            out.append("  </row>")
+        out.append("</rows>")
+        return _lines(out)
+    if format == "yaml":
+        if not rows:
+            return "[]\n"
+        out = []
+        for r in rows:
+            if not cols:
+                out.append("- {}")
+            for i, c in enumerate(cols):
+                out.append(("- " if i == 0 else "  ") + _yaml_key(c) + ": " + json.encode(r.get(c)))
+        return _lines(out)
+    fail("unknown export format %r" % format)
+
+def _export_run(s, env, keys):
+    rows = _rows(_get(env, s["over"]))
+    sources = list(keys)
+    for r in rows:
+        for k in _keys_of(r):
+            if k not in sources:
+                sources.append(k)
+    text = _encode(s["format"], rows, _columns(s, rows))
+    call("core.packs.write@1", path = _render(s["path"], env), text = text, sources = sorted(sources))
+
 def _output(s):
     """The variable a step writes, if any."""
     k = s["kind"]
@@ -310,6 +419,9 @@ def _leaf(ctx, s, env, keys):
         return _sort_run(s, env)
     if k == "save":
         _save_run(s, env, keys)
+        return None
+    if k == "export":
+        _export_run(s, env, keys)
         return None
     if k == "call":
         return _tag(_call_run(s, env), keys)
@@ -390,6 +502,7 @@ flow = struct(
     group = _group,
     sort = _sort,
     save = _save,
+    export = _export,
     call = _call_step,
     code = _code,
     run = _run,

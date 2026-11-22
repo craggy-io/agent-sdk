@@ -11,12 +11,14 @@ type Param struct {
 	Name string `json:"name"`
 	// Type is string, var, file, model, number, bool, steps, template, op,
 	// any, fn, capability, binds (a dict of argument names to variables),
-	// agent (an installed agent's id) or workflow (an installed workflow's
-	// name).
+	// agent (an installed agent's id), workflow (an installed workflow's
+	// name) or choice (one of Options).
 	Type     string `json:"type"`
 	Default  any    `json:"default,omitempty"`
 	Required bool   `json:"required,omitempty"`
 	Label    string `json:"label"`
+	// Options are what a choice may be, in the order a menu offers them.
+	Options []string `json:"options,omitempty"`
 }
 
 // Kind is one kind of step: a function in flow.star.
@@ -38,6 +40,13 @@ func p(name, typ, label string, def any) Param {
 func req(name, typ, label string) Param {
 	return Param{Name: name, Type: typ, Label: label, Required: true}
 }
+func choice(name, label string, options []string) Param {
+	return Param{Name: name, Type: "choice", Label: label, Default: options[0], Options: options}
+}
+
+// Formats are what an export step writes: a JSON array, JSON Lines, CSV
+// with a header row, XML or YAML.
+var Formats = []string{"json", "jsonl", "csv", "xml", "yaml"}
 
 var (
 	idParam    = req("id", "string", "Step ID")
@@ -82,6 +91,8 @@ var Kinds = []Kind{
 		Params: []Param{idParam, titleParam, req("over", "var", "Over"), req("by", "string", "By"), p("desc", "bool", "Largest first", false)}},
 	{Name: "save", Label: "Save", Capability: "core.packs.write@1", Tone: "success", Detail: "Writes a file into the pack.",
 		Params: []Param{idParam, titleParam, req("path", "template", "Path"), req("text", "var", "Text")}},
+	{Name: "export", Label: "Export", Capability: "core.packs.write@1", Tone: "success", Detail: "Writes a list of items into the pack as one data file: JSON, JSON Lines, CSV, XML or YAML. Fields leaves out all but the comma-separated fields named; fields starting with _ are always left out.",
+		Params: []Param{idParam, titleParam, req("over", "var", "Over"), choice("format", "Format", Formats), req("path", "template", "Path"), p("fields", "string", "Fields", "")}},
 	{Name: Call, Label: "Call a capability", Tone: "neutral", Detail: "Calls any capability the host serves, with fixed arguments and arguments read from earlier steps.",
 		Params: []Param{idParam, titleParam, req("capability", "capability", "Capability"), p("args", "any", "Arguments", nil),
 			p("bind", "binds", "Arguments from steps", nil), p("out", "var", "Output", "")}},
