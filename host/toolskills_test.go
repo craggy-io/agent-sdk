@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/craggy-io/agent-sdk/agentdef"
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/host"
 	"github.com/craggy-io/agent-sdk/model"
@@ -90,5 +91,55 @@ func TestSkillsComeWithTheToolsTheyExplain(t *testing.T) {
 	}
 	if len(provenance) != 1 || !strings.Contains(provenance[0], `"skills.secret-guide":"tool secret"`) {
 		t.Fatalf("provenance = %v", provenance)
+	}
+}
+
+// A skill given to one run is carried by that run alone: listed in the
+// prompt and readable through the skill tool, recorded as the run's, and
+// not listed twice beside one the agent already carries.
+func TestARunCarriesTheSkillsItIsGiven(t *testing.T) {
+	sink := tracemem.New()
+	prov := newRouted(map[string][]func(model.Request) model.Response{
+		"named": {builtinCall("c1", "skill", map[string]string{"name": "learned-graph-design"}), text("done"), text("again")},
+	})
+	s, err := host.Open(context.Background(), host.Options{
+		Config: config.Defaults(), View: echoView(), Provider: prov,
+		Defs: openDefs(t, toolSkillRoot(t)), Trace: sink,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	given := []agentdef.Skill{
+		{Name: "learned-graph-design", Description: "What this person wants of graphs.", Body: "- The node graph pans when you drag its background.\n"},
+		{Name: "secret-guide", Description: "Another guide.", Body: "Not this one."},
+	}
+	if _, err := s.RunAgent(context.Background(), "named", "go", host.WithThread("given"), host.WithSkills(given...)); err != nil {
+		t.Fatal(err)
+	}
+	sent := prov.sent("named")
+	prompt := sent[0].Items[0].Text
+	if !strings.Contains(prompt, "- `learned-graph-design`: What this person wants of graphs.") || strings.Count(prompt, "secret-guide") != 1 || strings.Contains(prompt, "Another guide.") {
+		t.Fatalf("the prompt is %q", prompt)
+	}
+	if got := lastToolResult(sent[1]); !strings.Contains(got, "pans when you drag its background") {
+		t.Fatalf("skill body = %q", got)
+	}
+	found := false
+	for _, e := range readAll(t, sink) {
+		if e.Type == "agentdef.resolved" && strings.Contains(string(e.Data), `"skills.learned-graph-design":"run"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the given skill is not recorded as the run's")
+	}
+
+	// A run given none carries none of them.
+	if _, err := s.RunAgent(context.Background(), "named", "go", host.WithThread("plain")); err != nil {
+		t.Fatal(err)
+	}
+	if plain := prov.sent("named")[2].Items[0].Text; strings.Contains(plain, "learned-graph-design") {
+		t.Fatalf("a run given no skills carries one: %q", plain)
 	}
 }

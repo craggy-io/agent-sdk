@@ -146,6 +146,8 @@ type Resolved struct {
 	// carry yet, both captured from the resolving catalog.
 	skillDescriptions map[string]string
 	toolSkills        []*Skill
+	// withoutSkills is set by WithoutSkills: no skill is attached after.
+	withoutSkills bool
 	// OutputSchema is the resolved loop.output schema, if any.
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	// Fragments are the prompt fragment names in order.

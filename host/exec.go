@@ -57,6 +57,10 @@ type ExecSpec struct {
 	// Fills are the slots filled for this run (agentdef.ResolveFilled).
 	// They apply to this agent only, not to the agents it delegates to.
 	Fills []agentdef.Fill
+	// Skills are skills given to this run alone, beside the ones its
+	// definition carries (agentdef.Resolved.AttachSkills). Like Fills they
+	// apply to this agent only.
+	Skills []agentdef.Skill
 	// Cast, for a chat workflow, says which installed agents play its
 	// roles this turn: by role, the agents in its seats, in order. A role
 	// left out is played as the workflow declares (agentdef.Role).
@@ -119,6 +123,13 @@ func WithOutputCheck(check loop.OutputCheck, maxRetries int) RunOption {
 // the same slot are left out (agentdef.ResolveFilled).
 func WithFills(fills ...agentdef.Fill) RunOption {
 	return func(e *ExecSpec) { e.Fills = append([]agentdef.Fill(nil), fills...) }
+}
+
+// WithSkills gives this run skills that no definition of its agent
+// names, read through the skill tool like the ones it carries
+// (ExecSpec.Skills).
+func WithSkills(skills ...agentdef.Skill) RunOption {
+	return func(e *ExecSpec) { e.Skills = append([]agentdef.Skill(nil), skills...) }
 }
 
 // WithCast says, for a chat workflow's turn, which installed agents play
@@ -434,6 +445,7 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	}
 	// Skills that explain tools this view holds come with them.
 	resolved.AttachToolSkills(toolNames(view))
+	resolved.AttachSkills(spec.Skills...)
 
 	// Thread (§2 chat continuity; §6.5 handle threads).
 	tKey := spec.threadKey

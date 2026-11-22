@@ -165,6 +165,17 @@ with the node's narrowed tool view (host view ∩ definition filter ∩
 call-site filter), so an agent whose filter leaves a tool out is never
 taught it. `WithoutSkills` drops these too.
 
+## Skills given to a run
+
+`Resolved.AttachSkills(skills...)` adds skills that no definition of the
+chain names and that need not be catalogued (a `Skill` value: name,
+description, body) to the ones carried, as `AttachToolSkills` does,
+recording `Provenance["skills.<name>"] = "run"`. A skill already carried
+keeps the carried one, and after `WithoutSkills` nothing is added. `host`
+attaches what `WithSkills` gave the run after the tool skills, so a host
+can hand an agent skills it keeps elsewhere, such as ones a person
+turned on for a conversation.
+
 ## Slots
 
 An agent says what it wants by the name of a **slot**, not by the bundle

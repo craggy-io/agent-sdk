@@ -499,9 +499,36 @@ func (r *Resolved) AttachToolSkills(tools []string) []string {
 	return added
 }
 
+// AttachSkills adds skills given to this run alone, which no definition
+// of the chain names and that need not be catalogued, to the skills
+// carried, and re-renders the prompt. A skill already carried keeps the
+// carried one. It records Provenance["skills.<name>"] as "run" and
+// returns the names added; after WithoutSkills it adds nothing.
+func (r *Resolved) AttachSkills(skills ...Skill) []string {
+	if r.withoutSkills {
+		return nil
+	}
+	var added []string
+	for _, sk := range skills {
+		if sk.Name == "" || slices.Contains(r.Skills, sk.Name) {
+			continue
+		}
+		r.Skills = append(r.Skills, sk.Name)
+		r.SkillBodies[sk.Name] = sk.Body
+		r.skillDescriptions[sk.Name] = sk.Description
+		r.Provenance["skills."+sk.Name] = "run"
+		added = append(added, sk.Name)
+	}
+	if len(added) > 0 {
+		r.renderSkills()
+	}
+	return added
+}
+
 // WithoutSkills removes the skill prompt and bodies from this run's
 // projection, and the skills its tools would bring.
 func (r *Resolved) WithoutSkills() {
 	r.SystemPrompt = r.promptWithoutSkills
 	r.Skills, r.SkillBodies, r.toolSkills = nil, nil, nil
+	r.withoutSkills = true
 }

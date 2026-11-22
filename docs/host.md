@@ -6,9 +6,10 @@ and rebuilds threads/handles from the trace; `Close` in reverse
 order (host, then sink).
 
 Execution: `RunAgent` (name or dynamic definition, with
-`WithThread`/`WithProfile`/`WithVars`/`WithTools`/`WithOutput`/`WithFills`
-options; `WithFills` fills slots for this agent only, not the agents it
-delegates to, see agentdef's "Slots") and the general `ExecAgent(ExecSpec)`. One-shots and spawned
+`WithThread`/`WithProfile`/`WithVars`/`WithTools`/`WithOutput`/`WithFills`/`WithSkills`
+options; `WithFills` fills slots and `WithSkills` gives skills no
+definition names, each for this agent only, not the agents it delegates
+to, see agentdef's "Slots" and "Skills given to a run") and the general `ExecAgent(ExecSpec)`. One-shots and spawned
 handles share the run tree, budget and concurrency semaphore.
 
 Control: `Spawn`, `SendInput` (durable `Receipt`; modes `message`,
