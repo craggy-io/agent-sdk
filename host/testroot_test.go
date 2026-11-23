@@ -19,6 +19,7 @@ var testAgents = [][2]string{
 	{"child", `agent(name = "child", profile = "default", prompt = [{"p": "You are child."}], delegates = ["grand"], tools = tools_filter(include = ["echo"]))`},
 	{"grand", `agent(name = "grand", profile = "default", prompt = [{"p": "You are grand."}])`},
 	{"badprof", `agent(name = "badprof", profile = "nope", prompt = [{"p": "You are badprof."}])`},
+	{"needy", `agent(name = "needy", profile = "default", prompt = [{"p": "You are needy."}], tools = tools_filter(include = ["echo", "web_fetch", "web_*", "gone"], exclude = ["gone"]))`},
 	{"lazy", `agent(name = "lazy", profile = "default", prompt = [{"p": "You are lazy."}], tools = tools_filter(include = ["echo"]), loop = loop_spec(progressive_tools = True))`},
 }
 

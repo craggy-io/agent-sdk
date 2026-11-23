@@ -239,6 +239,10 @@ type Options struct {
 	Defs     *agentdef.Loader
 	Trace    trace.Sink
 	Caller   model.CallerInfo
+	// Needs, when set, is asked before each agent starts what it needs:
+	// the tools its definition names that View doesn't hold, and the
+	// tools it was given. The agent waits for the answer (see Needs).
+	Needs NeedsFunc
 }
 
 // Session is the runtime root. Open one; Close it when done.
@@ -247,6 +251,7 @@ type Host struct {
 	provider model.Provider
 	defs     *agentdef.Loader
 	view     ToolView
+	needs    NeedsFunc
 	sink     trace.Sink
 	lease    trace.WriterLease
 	recorder *trace.Recorder
@@ -280,7 +285,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	}
 	s := &Host{
 		id: opts.ID, provider: opts.Provider, defs: opts.Defs,
-		view: opts.View, sink: opts.Trace, cfg: opts.Config, epoch: model.NewID(),
+		view: opts.View, needs: opts.Needs, sink: opts.Trace, cfg: opts.Config, epoch: model.NewID(),
 	}
 	if s.id == "" {
 		s.id = model.NewID()

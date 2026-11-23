@@ -24,6 +24,20 @@ call, effects mapped, jobs waitable, agent caller stamped);
 `NewMapView` serves plain Go functions. `Narrow` intersects filters;
 authority only narrows.
 
+Needs: a filter's include names that aren't globs and that the host's
+`View` doesn't hold are an agent's missing tools; the filter only
+narrows, so without this they would vanish without a word.
+`Options.Needs` (a `NeedsFunc`) is asked before every agent starts, on
+the starting node's context and before it takes a concurrency slot,
+with `Needs{Agent, Description, Missing, Tools}`; the agent waits for
+the answer. That is where a host pauses an agent to have a person
+install a plugin or make the place it works in. `NeedsAnswer.Again`
+works the agent's tools out again (something was installed meanwhile);
+`NeedsAnswer.Note` is added to its instructions. Whatever is still
+missing, with or without a `Needs`, is recorded as `node.tools_missing`
+and the agent is told plainly that it doesn't have those tools and to
+say what it couldn't do without them. `node.needs` records each ask.
+
 Events: `Events(ctx, EventOptions)` streams durable trace events
 from a cursor plus live deltas (bounded per subscriber; slow
 subscribers disconnect with a gap marker). `SetConfig` hot-applies a

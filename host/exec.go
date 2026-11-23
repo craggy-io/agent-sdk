@@ -435,14 +435,23 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	}
 
 	// Tool view: parent ceiling ∩ definition filter ∩ call-site filter (§4.3).
-	view := parent.view
-	if view == nil {
-		view = s.view
+	narrowed := func() ToolView {
+		view := parent.view
+		if view == nil {
+			view = s.view
+		}
+		view = narrow(view, resolved.Tools)
+		if spec.Tools != nil {
+			view = narrow(view, *spec.Tools)
+		}
+		return view
 	}
-	view = narrow(view, resolved.Tools)
-	if spec.Tools != nil {
-		view = narrow(view, *spec.Tools)
-	}
+	view := narrowed()
+	// What the agent needs that it wasn't given: the host may pause it
+	// here to have it installed, and it is told of what is still missing.
+	view, needsNote := s.prepareNode(ctx, Needs{RunID: run.id, NodeID: nodeID, Agent: resolved.Name,
+		Description: resolved.Description, Missing: missingTools(s.view, resolved.Tools), Tools: toolNames(view)},
+		resolved.Tools, narrowed, view)
 	// Skills that explain tools this view holds come with them.
 	resolved.AttachToolSkills(toolNames(view))
 	resolved.AttachSkills(spec.Skills...)
@@ -536,7 +545,7 @@ func (s *Host) execNode(ctx context.Context, parent *nodeCtx, spec ExecSpec, top
 	act := &activation{target: mailTarget, armed: spec.armFollow}
 	in := loop.Input{
 		NodeID: nodeID, RunID: run.id, SessionID: s.id, DefName: resolved.Name,
-		System: resolved.SystemPrompt, Thread: thread, Task: spec.Task,
+		System: strings.Join(nonEmptyNotes(resolved.SystemPrompt, needsNote), "\n\n"), Thread: thread, Task: spec.Task,
 		Policy: policy, Profile: eff.Profile, ProfileName: eff.ProfileName,
 		OnDelta: func(d model.Delta) { s.hub.publishDelta(nodeID, run.id, d) },
 		DeliverPending: func() []model.Item {
