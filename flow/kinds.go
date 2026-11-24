@@ -48,6 +48,11 @@ func choice(name, label string, options []string) Param {
 // with a header row, XML or YAML.
 var Formats = []string{"json", "jsonl", "csv", "xml", "yaml"}
 
+// Decisions are the shapes a decide step asks for, as core.models.decide
+// names them: yes or no, one of the options, several of them, a score
+// from min to max, or every option in order.
+var Decisions = []string{"bool", "choice", "choices", "score", "rank"}
+
 var (
 	idParam    = req("id", "string", "Step ID")
 	titleParam = p("title", "string", "Title", "")
@@ -77,6 +82,11 @@ var Kinds = []Kind{
 		Params: []Param{idParam, titleParam, req("prompt", "file", "Prompt"), req("input", "var", "Input"), req("out", "var", "Output"),
 			p("model", "model", "Model", "low"), p("schema", "file", "Structured output", ""), p("many", "bool", "A list of them", false),
 			p("max_tokens", "number", "Output tokens at most", int64(2000))}},
+	{Name: "decide", Label: "Decide", Capability: "core.models.decide@1", Spends: true, Tone: "accent", Detail: "One checked decision about an earlier step's output: yes or no, one or several of some options, a score, or the options in order, with the model's confidence and, if asked, its reason.",
+		Params: []Param{idParam, titleParam, req("question", "template", "Question"), req("input", "var", "About"), req("out", "var", "Output"),
+			choice("decision", "Decision", Decisions), p("options", "string", "Options (comma-separated)", ""),
+			p("min", "number", "Lowest score", int64(0)), p("max", "number", "Highest score", int64(1)),
+			p("criteria", "string", "How to decide", ""), p("explain", "bool", "With a reason", false), p("model", "model", "Model", "low")}},
 	{Name: "workflow", Label: "Run a workflow", Capability: "core.workflows.run@1", Spends: true, Tone: "accent", Detail: "Runs an installed workflow with an earlier step's output as its input.",
 		Params: []Param{idParam, titleParam, req("workflow", "workflow", "Workflow"), p("input", "var", "Input", ""), req("out", "var", "Output")}},
 	{Name: Approve, Label: "Ask a person", Capability: ApproveRef, Tone: "warning", Detail: "Stops the run until a person answers: Yes goes on, No ends the run.",
@@ -150,7 +160,7 @@ func (s *Step) Output() string {
 			return o
 		}
 		return s.String("input")
-	case "agent", "ask", "embed", "group", "code", "workflow", Call:
+	case "agent", "ask", "decide", "embed", "group", "code", "workflow", Call:
 		return s.String("out")
 	}
 	return ""

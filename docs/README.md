@@ -8,6 +8,7 @@ Per-package guides. Start with the [README](../README.md) quick start and
 | [design](design.md) | The invariants code comments cite as `§N` |
 | [model](model.md) | Provider seam, requests, tools, usage |
 | [openrouter](openrouter.md) | OpenRouter provider |
+| [decide](decide.md) | One checked decision: bool, choice, choices, score, rank, extract |
 | [transcript](transcript.md) | Items, normalisation, invariants |
 | [loop](loop.md) | ReAct loop, dispatch, compaction |
 | [trace](trace.md) | Events, blobs, sinks, query and replay |

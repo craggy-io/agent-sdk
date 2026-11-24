@@ -10,6 +10,7 @@ Use this guide when editing this repository or integrating its Go module,
 | Need | Package and contract |
 | --- | --- |
 | Talk to a model; define requests, tools, usage | [model](docs/model.md) |
+| Ask a model for one checked decision: yes or no, a choice, a score, a ranking, fields | [decide](docs/decide.md) |
 | Store or transform conversation history | [transcript](docs/transcript.md) |
 | Implement host-enforced sampling and settlement | [loop](docs/loop.md) |
 | Record or replay runs | [trace](docs/trace.md) |

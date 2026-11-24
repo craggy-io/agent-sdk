@@ -5,7 +5,8 @@ capability-services registry: `agents.*` (list/get/run/spawn/send/
 interrupt/resume/close/status/handles/wait/define/promote),
 `workflows.*` (list/get/define/run/pending/answer/promote),
 `sessions.*`, `recovery.*`, `trace.*`, `llm.*` (provider-neutral
-one-shot sampling by profile, model info, profile list) and
+one-shot sampling by profile, one checked decision (`llm.decide`, see
+[decide](decide.md)), model info, profile list) and
 `memory.*`, plus their groups. `agents.run` and `workflows.run` are
 long jobs; everything else is synchronous.
 

@@ -7,7 +7,7 @@ named variables: an input's rows, an agent's output, a group. A step inside a
 For each sees the loop's item; what it outputs is gathered into a list of the
 same name once the loop ends.
 
-The named steps call harness capabilities (core.models.complete@1,
+The named steps call harness capabilities (core.models.complete@1, core.models.decide@1,
 core.models.embed@1, core.workflows.run@1, core.packs.write@1), so a pipeline
 that runs in Craggy Studio runs in the harness unchanged; flow.call calls any
 other capability the host serves. Progress goes out as print() lines starting
@@ -46,6 +46,9 @@ def _approve(id, prompt, show = "", title = ""):
 
 def _ask(id, prompt, input, out, title = "", model = "low", schema = "", many = False, max_tokens = 2000):
     return _step("ask", id, title, prompt = prompt, input = input, out = out, model = model, schema = schema, many = many, max_tokens = max_tokens)
+
+def _decide(id, question, input, out, title = "", decision = "bool", options = "", min = 0, max = 1, criteria = "", explain = False, model = "low"):
+    return _step("decide", id, title, question = question, input = input, out = out, decision = decision, options = options, min = min, max = max, criteria = criteria, explain = explain, model = model)
 
 def _embed(id, over, field, out, title = "", model = "embed"):
     return _step("embed", id, title, over = over, field = field, out = out, model = model)
@@ -173,6 +176,28 @@ def _ask_run(ctx, s, env):
     if not schema:
         return res["text"]
     return _structured(s, json.decode(_strip_fence(res["text"])))
+
+def _decide_run(s, env):
+    data = _get(env, s["input"])
+    args = {
+        "kind": s["decision"],
+        "question": _render(s["question"], env),
+        "context": data if type(data) == "string" else json.encode(data),
+        "model": s["model"],
+        "explain": s["explain"],
+    }
+    if s["criteria"]:
+        args["criteria"] = s["criteria"]
+    if s["decision"] in ("choice", "choices", "rank"):
+        args["options"] = [{"value": o.strip()} for o in s["options"].split(",") if o.strip()]
+    if s["decision"] == "score":
+        args["min"] = s["min"]
+        args["max"] = s["max"]
+    res = call("core.models.decide@1", **args)
+    out = {"value": res["value"], "confidence": res["confidence"]}
+    if res.get("reason"):
+        out["reason"] = res["reason"]
+    return out
 
 def _agent_run(ctx, s, env):
     data = _get(env, s["input"])
@@ -390,7 +415,7 @@ def _output(s):
     k = s["kind"]
     if k in ("keep_if", "sort"):
         return s["over"]
-    if k in ("read", "agent", "ask", "embed", "group", "code", "call", "workflow"):
+    if k in ("read", "agent", "ask", "decide", "embed", "group", "code", "call", "workflow"):
         return s["out"]
     return ""
 
@@ -404,6 +429,8 @@ def _leaf(ctx, s, env, keys):
         return ctx["inputs"][s["input"]]
     if k == "ask":
         return _tag(_ask_run(ctx, s, env), keys)
+    if k == "decide":
+        return _tag(_decide_run(s, env), keys)
     if k == "agent":
         out = _agent_run(ctx, s, env)
         if type(out) == "list":
@@ -497,6 +524,7 @@ flow = struct(
     workflow = _workflow,
     approve = _approve,
     ask = _ask,
+    decide = _decide,
     embed = _embed,
     keep_if = _keep_if,
     group = _group,

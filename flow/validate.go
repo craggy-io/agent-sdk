@@ -221,6 +221,11 @@ func Validate(b Bundle, env Env) []Problem {
 					add(FileName, id, "no input named %s", s.String("input"))
 				}
 			}
+			if s.Kind == "decide" {
+				for _, msg := range decideProblems(s) {
+					add(FileName, id, "%s", msg)
+				}
+			}
 			if s.Kind == "ask" && env.Model != nil {
 				if limit, ok := env.Model(s.String("model")); ok {
 					if n, _ := s.Get("max_tokens"); n != nil {
@@ -306,4 +311,59 @@ func stripComments(src string) string {
 		b.WriteString(line + "\n")
 	}
 	return b.String()
+}
+
+// decideProblems are what a decide step asks that core.models.decide
+// would refuse: options for a kind that picks from them, and none for
+// one that doesn't; a score range whose low end isn't below its high.
+func decideProblems(s *Step) []string {
+	var out []string
+	var options []string
+	for _, o := range strings.Split(s.String("options"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			options = append(options, o)
+		}
+	}
+	kind := s.String("decision")
+	if kind == "" {
+		kind = Decisions[0]
+	}
+	switch kind {
+	case "choice", "rank":
+		if len(options) < 2 {
+			out = append(out, fmt.Sprintf("a %s decision needs at least two options, comma-separated", kind))
+		}
+	case "choices":
+		if len(options) == 0 {
+			out = append(out, "a choices decision needs options, comma-separated")
+		}
+	default:
+		if len(options) > 0 {
+			out = append(out, fmt.Sprintf("a %s decision takes no options", kind))
+		}
+	}
+	if kind == "score" {
+		lo, _ := s.Get("min")
+		hi, _ := s.Get("max")
+		if l, h, ok := numbers(lo, hi); ok && !(l < h) {
+			out = append(out, fmt.Sprintf("the lowest score %v isn't below the highest %v", lo, hi))
+		}
+	}
+	return out
+}
+
+// numbers reads two step values as numbers.
+func numbers(a, b any) (float64, float64, bool) {
+	num := func(v any) (float64, bool) {
+		switch n := v.(type) {
+		case int64:
+			return float64(n), true
+		case float64:
+			return n, true
+		}
+		return 0, false
+	}
+	x, ok1 := num(a)
+	y, ok2 := num(b)
+	return x, y, ok1 && ok2
 }

@@ -3,9 +3,11 @@ package agentcap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 
 	"github.com/craggy-io/agent-sdk/config"
+	"github.com/craggy-io/agent-sdk/decide"
 	"github.com/craggy-io/agent-sdk/memory"
 	"github.com/craggy-io/agent-sdk/model"
 	"github.com/craggy-io/capability-services/registry"
@@ -78,6 +80,26 @@ func (s *service) llmCaps() []registry.Capability {
 				return out, nil
 			}, registry.WithEffects(registry.OpenWorld),
 			registry.Describe("One provider sample with no tools and no loop. For agent behaviour use agents.run or workflows.")),
+		registry.Func("llm.decide", "Ask the model for one decision",
+			func(ctx context.Context, in struct {
+				decide.Request
+				Profile string `json:"profile,omitempty" jsonschema:"the profile whose model and provider preferences to use; empty means the default profile"`
+			}) (decide.Decision, error) {
+				prov := s.h.Provider()
+				if prov == nil {
+					return decide.Decision{}, registry.Errorf(registry.Unavailable, "no model provider configured")
+				}
+				p := config.Resolve(s.h.Config(), nil, in.Profile).Profile
+				d, err := decide.Decider{Provider: prov, Model: p.Model, Prefs: p.Provider}.Decide(ctx, in.Request)
+				switch {
+				case errors.Is(err, decide.ErrInvalid):
+					return d, registry.WrapCode(registry.Invalid, err)
+				case errors.Is(err, decide.ErrUndecided):
+					return d, registry.WrapCode(registry.Unavailable, err)
+				}
+				return d, coded(err)
+			}, registry.WithEffects(registry.OpenWorld),
+			registry.Describe("One decision of a known shape, made by the model and checked: bool (yes or no), choice (one of options), choices (several of options), score (a number from min to max), rank (every option, best first) or extract (an object matching schema). The answer is the value, the model's confidence from 0 to 1, its reason when explain is set, and the usage of every attempt. An answer that doesn't fit is asked for again once; a model that still gives none answers unavailable.")),
 		registry.Func("llm.model", "Describe one model",
 			func(ctx context.Context, in struct {
 				ID string `json:"id"`

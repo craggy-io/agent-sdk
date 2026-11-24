@@ -27,10 +27,15 @@ problems := flow.Validate(b, flow.Env{Host: "Craggy Studio", Served: served, For
   for byte. A function a step can't express is a Code step (`fn = name`).
   A file with no `STEPS` is a hand-written `run()`.
 - `Kinds` are the step kinds with their parameters, in `flow.star`'s
-  order: read, for_each, agent, workflow, approve, ask, embed, keep_if,
+  order: read, for_each, agent, workflow, approve, ask, decide, embed, keep_if,
   group, sort, save, export, call, code. `Step.Calls` is the capability a step calls, `Step.Reads`
   the variables it reads, and `Step.Line` where it is written. A `choice`
   parameter is one of its `Options`.
+- `decide` asks `core.models.decide@1` one checked decision about its
+  `input` (see [decide](decide.md)): `decision` is one of `Decisions` (bool,
+  choice, choices, score, rank), `options` are comma-separated, `min` and
+  `max` bound a score, `question` is a template. Its output is
+  `{value, confidence, reason}`, the reason only with `explain`.
 - `export` writes a list of items into the pack as one data file through
   `core.packs.write@1`, in one of `Formats`: `json` (an array), `jsonl`,
   `csv` (a header row, RFC 4180 quoting), `xml` (`<rows><row>`, a field
