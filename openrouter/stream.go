@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/craggy-io/agent-sdk/model"
 )
@@ -148,6 +151,7 @@ func readStream(ctx context.Context, cancel context.CancelFunc, body io.Reader, 
 	var (
 		text       strings.Builder
 		reasonText strings.Builder
+		reasonKey  string // index/type of the reasoning block being streamed
 		reasoning  []json.RawMessage
 		calls      = map[int]*callAcc{}
 		finish     string
@@ -184,9 +188,39 @@ func readStream(ctx context.Context, cancel context.CancelFunc, body io.Reader, 
 			text.WriteString(d.Content)
 			emit(model.Delta{Kind: "text", Text: d.Content})
 		}
+		// A new reasoning block (a new reasoning_details index or type)
+		// starts a new paragraph: providers stream separate summary
+		// blocks back to back with no whitespace between them.
+		newBlock := false
+		for _, rd := range d.ReasoningDetails {
+			var probe struct {
+				Type  string `json:"type"`
+				Index *int   `json:"index"`
+			}
+			if json.Unmarshal(rd, &probe) != nil {
+				continue
+			}
+			key := probe.Type
+			if probe.Index != nil {
+				key += "#" + strconv.Itoa(*probe.Index)
+			}
+			if key != reasonKey {
+				newBlock = newBlock || reasonKey != ""
+				reasonKey = key
+			}
+			break
+		}
+		writeReasoning := func(s string) {
+			if reasonText.Len() > 0 && (newBlock || runsOnSentence(reasonText.String(), s)) {
+				reasonText.WriteString(reasoningBreak)
+				emit(model.Delta{Kind: "reasoning", Text: reasoningBreak})
+			}
+			newBlock = false
+			reasonText.WriteString(s)
+			emit(model.Delta{Kind: "reasoning", Text: s})
+		}
 		if d.Reasoning != "" {
-			reasonText.WriteString(d.Reasoning)
-			emit(model.Delta{Kind: "reasoning", Text: d.Reasoning})
+			writeReasoning(d.Reasoning)
 		}
 		for _, rd := range d.ReasoningDetails {
 			reasoning = append(reasoning, rd)
@@ -194,8 +228,7 @@ func readStream(ctx context.Context, cancel context.CancelFunc, body io.Reader, 
 				Text string `json:"text"`
 			}
 			if json.Unmarshal(rd, &probe) == nil && probe.Text != "" {
-				reasonText.WriteString(probe.Text)
-				emit(model.Delta{Kind: "reasoning", Text: probe.Text})
+				writeReasoning(probe.Text)
 			}
 		}
 		for _, tc := range d.ToolCalls {
@@ -356,4 +389,20 @@ func mapFinish(f string) model.Finish {
 	default:
 		return model.FinishMissing
 	}
+}
+
+// reasoningBreak separates two reasoning blocks in the streamed text.
+const reasoningBreak = "\n\n"
+
+// runsOnSentence reports whether next starts a new sentence glued to the
+// end of prev with no space ("…is present." + "Extending …"). Tokens carry
+// their own leading space, so a capitalised word straight after a
+// lowercase sentence end is a block boundary the provider did not mark.
+func runsOnSentence(prev, next string) bool {
+	end, size := utf8.DecodeLastRuneInString(prev)
+	before, _ := utf8.DecodeLastRuneInString(prev[:len(prev)-size])
+	first, size := utf8.DecodeRuneInString(next)
+	second, _ := utf8.DecodeRuneInString(next[size:])
+	return (end == '.' || end == '!' || end == '?') && unicode.IsLower(before) &&
+		unicode.IsUpper(first) && unicode.IsLower(second)
 }

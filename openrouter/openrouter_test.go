@@ -466,3 +466,34 @@ func TestModelCache(t *testing.T) {
 		t.Errorf("/models fetched %d times, want 1 (cached)", hits.Load())
 	}
 }
+
+// Separate reasoning blocks are streamed back to back; they are joined
+// with a paragraph break, whether marked by a new reasoning_details index
+// or only by a sentence glued to the next.
+func TestReasoningBlocksAreSeparated(t *testing.T) {
+	script := `data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Checking the list.","index":0}]}}]}` + "\n\n" +
+		`data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Then the tags","index":1}]}}]}` + "\n\n" +
+		`data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.text","text":" too.","index":1}]}}]}` + "\n\n" +
+		`data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"reasoning":"Extending checks to v1.2"}}]}` + "\n\n" +
+		`data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"reasoning":".Done"}}]}` + "\n\n" +
+		`data: {"id":"g3","model":"m","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}` + "\n\n" +
+		"data: [DONE]\n\n"
+	srv := sseServer(t, &capture{}, script)
+	c := openrouter.New("k", openrouter.WithBaseURL(srv.URL))
+	var streamed strings.Builder
+	resp, err := c.Sample(context.Background(), baseRequest(), func(d model.Delta) {
+		if d.Kind == "reasoning" {
+			streamed.WriteString(d.Text)
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Checking the list.\n\nThen the tags too.\n\nExtending checks to v1.2.Done"
+	if streamed.String() != want {
+		t.Errorf("streamed reasoning = %q, want %q", streamed.String(), want)
+	}
+	if resp.Item.Reasoning == nil || resp.Item.Reasoning.Text != want {
+		t.Errorf("reasoning = %+v, want %q", resp.Item.Reasoning, want)
+	}
+}
