@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -172,5 +174,54 @@ func TestRebuildLeavesSettledCallsAlone(t *testing.T) {
 	_, ends, _ := callEvents(t, sink)
 	if got := ends["c1"]; len(got) != 1 || got[0].Recovered || got[0].Settled != "ran" {
 		t.Fatalf("call.end for a settled call = %+v, want the original only", got)
+	}
+}
+
+// A rebuilt thread holds each item once: the step that answered and the
+// next step's request record the same assistant item, and a restarted
+// host must not keep both (the second would be renamed and given an
+// invented result, and a provider refuses the repeated reasoning).
+func TestRebuildKeepsEachItemOnce(t *testing.T) {
+	ctx := context.Background()
+	sink := tracemem.New()
+	call := agenttest.CallsResponse(model.ToolCall{ID: "c1", Name: "echo", Args: json.RawMessage(`{}`), ArgsOK: true})
+	call.Item.Text = "checking"
+	// As a provider returns it; what the next request records is the same
+	// reasoning written again, without the index and in another order.
+	call.Item.Reasoning = &model.Reasoning{Details: json.RawMessage(`[{"type":"reasoning.encrypted","data":"opaque","id":"rs_1","format":"f","index":0}]`)}
+	prov := agenttest.NewScripted(call, agenttest.TextResponse("done"))
+	opts := host.Options{ID: "once-session", Config: config.Defaults(), View: echoView(),
+		Provider: prov, Defs: openDefs(t, testRoot(t)), Trace: sink}
+	s1, err := host.Open(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s1.RunAgent(ctx, "solo", "call a tool"); err != nil || res.Status != "done" {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	want := s1.ThreadItems("")
+	_ = s1.Close()
+	s2, err := host.Open(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s2.Close() }()
+	if err := s2.Rebuild(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	got := s2.ThreadItems("")
+	describe := func(items []model.Item) []string {
+		var out []string
+		for _, it := range items {
+			ids := ""
+			for _, c := range it.Calls {
+				ids += c.ID
+			}
+			out = append(out, fmt.Sprintf("%d %s %q %s%s", it.Seq, it.Kind, it.Text, ids, it.CallID))
+		}
+		return out
+	}
+	if !slices.Equal(describe(got), describe(want)) {
+		t.Fatalf("rebuilt thread:\n%s\nwant:\n%s", strings.Join(describe(got), "\n"), strings.Join(describe(want), "\n"))
 	}
 }

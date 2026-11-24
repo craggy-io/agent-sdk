@@ -56,6 +56,13 @@ func (s *Host) Rebuild(ctx context.Context, runID string) error {
 	nodes := map[string]nodeMeta{}
 	threadSeen := map[string]map[trace.Hash]bool{}
 	threadItems := map[string][]model.Item{}
+	// The item at each seq of a thread, by its index in threadItems. A
+	// step's response and the next step's request both record the
+	// assistant item, and not always byte for byte (a provider's
+	// reasoning details are written again without their index, in
+	// another order), so one seq is one item, whatever its hash: the
+	// later record replaces the earlier.
+	threadSeq := map[string]map[int]int{}
 	addItems := func(key string, hashes []trace.Hash) {
 		if key == "" {
 			return
@@ -64,15 +71,23 @@ func (s *Host) Rebuild(ctx context.Context, runID string) error {
 		if seen == nil {
 			seen = map[trace.Hash]bool{}
 			threadSeen[key] = seen
+			threadSeq[key] = map[int]int{}
 		}
 		for _, hh := range hashes {
 			if seen[hh] {
 				continue
 			}
 			seen[hh] = true
-			if it, err := trace.GetItem(ctx, s.sink, hh); err == nil {
-				threadItems[key] = append(threadItems[key], it)
+			it, err := trace.GetItem(ctx, s.sink, hh)
+			if err != nil {
+				continue
 			}
+			if at, ok := threadSeq[key][it.Seq]; ok {
+				threadItems[key][at] = it
+				continue
+			}
+			threadSeq[key][it.Seq] = len(threadItems[key])
+			threadItems[key] = append(threadItems[key], it)
 		}
 	}
 
