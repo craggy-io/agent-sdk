@@ -68,6 +68,9 @@ def _save(id, path, text, title = ""):
 def _export(id, over, path, format = "json", fields = "", title = ""):
     return _step("export", id, title, over = over, format = format, path = path, fields = fields)
 
+def _dataset(id, over, collection, key, type = "", fields = "", text = "", title = ""):
+    return _step("dataset", id, title, over = over, collection = collection, key = key, type = type, fields = fields, text = text)
+
 def _call_step(id, capability, args = None, bind = None, out = "", title = ""):
     return _step("call", id, title, capability = capability, args = args or {}, bind = bind or {}, out = out)
 
@@ -410,6 +413,74 @@ def _export_run(s, env, keys):
     text = _encode(s["format"], rows, _columns(s, rows))
     call("core.packs.write@1", path = _render(s["path"], env), text = text, sources = sorted(sources))
 
+# --- dataset: a list of items as one typed, keyed collection ---
+
+def _dataset_fields(s, rows):
+    """The collection's fields: as declared (name:type), else read from the rows."""
+    named = [f.strip() for f in s.get("fields", "").split(",") if f.strip()]
+    if named:
+        out = []
+        for f in named:
+            name, _, typ = f.partition(":")
+            out.append({"name": name.strip(), "type": typ.strip() or "string"})
+        return out
+    out = []
+    types = {}
+    for r in rows:
+        for k in r:
+            if type(k) != "string" or k.startswith("_"):
+                continue
+            if k not in types:
+                out.append(k)
+                types[k] = ""
+            if types[k] == "" and r.get(k) != None:
+                t = type(r[k])
+                types[k] = t if t in ("string", "int", "float", "bool") else "string"
+    return [{"name": k, "type": types[k] or "string"} for k in out]
+
+def _dataset_check(s, fields, r):
+    """One row against its declared field types; a missing value is fine, a wrong kind is not."""
+    for f in fields:
+        v = r.get(f["name"])
+        if v == None:
+            continue
+        t = type(v)
+        want = f["type"]
+        ok = (want == "string" and t == "string") or (want in ("time", "date") and t == "string") or (want == "int" and t == "int") or (want == "float" and t in ("int", "float")) or (want == "bool" and t == "bool")
+        if not ok:
+            fail("step %s: field %s is declared %s but holds a %s" % (s["id"], f["name"], want, t))
+
+def _dataset_run(s, env, keys):
+    rows = _rows(_get(env, s["over"]))
+    fields = _dataset_fields(s, rows)
+    cols = [f["name"] for f in fields]
+    key = s["key"]
+    seen = {}
+    sources = list(keys)
+    for r in rows:
+        _dataset_check(s, fields, r)
+        k = r.get(key)
+        if k == None or str(k) == "":
+            fail("step %s: a row has no %s: every dataset row needs its key" % (s["id"], key))
+        if str(k) in seen:
+            fail("step %s: two rows share the key %r" % (s["id"], k))
+        seen[str(k)] = True
+        for sk in _keys_of(r):
+            if sk not in sources:
+                sources.append(sk)
+    path = "datasets/%s.jsonl" % s["collection"]
+    call("core.packs.write@1", path = path, text = _encode("jsonl", rows, cols), sources = sorted(sources))
+    schema = {
+        "type": s.get("type", ""),
+        "collection": s["collection"],
+        "key": key,
+        "fields": fields,
+        "text": [t.strip() for t in s.get("text", "").split(",") if t.strip()],
+        "rows": len(rows),
+        "file": path,
+    }
+    call("core.packs.write@1", path = "datasets/%s.schema.json" % s["collection"], text = json.indent(json.encode(schema), indent = "  ") + "\n", sources = sorted(sources))
+
 def _output(s):
     """The variable a step writes, if any."""
     k = s["kind"]
@@ -449,6 +520,9 @@ def _leaf(ctx, s, env, keys):
         return None
     if k == "export":
         _export_run(s, env, keys)
+        return None
+    if k == "dataset":
+        _dataset_run(s, env, keys)
         return None
     if k == "call":
         return _tag(_call_run(s, env), keys)
@@ -531,6 +605,7 @@ flow = struct(
     sort = _sort,
     save = _save,
     export = _export,
+    dataset = _dataset,
     call = _call_step,
     code = _code,
     run = _run,

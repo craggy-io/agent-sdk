@@ -226,6 +226,14 @@ func Validate(b Bundle, env Env) []Problem {
 					add(FileName, id, "%s", msg)
 				}
 			}
+			if s.Kind == Dataset {
+				if inLoop {
+					add(FileName, id, "save as dataset outside a For each: one collection for the run, over the gathered items")
+				}
+				for _, msg := range datasetProblems(s) {
+					add(FileName, id, "%s", msg)
+				}
+			}
 			if s.Kind == "ask" && env.Model != nil {
 				if limit, ok := env.Model(s.String("model")); ok {
 					if n, _ := s.Get("max_tokens"); n != nil {
@@ -262,6 +270,21 @@ func Validate(b Bundle, env Env) []Problem {
 		}
 	}
 	check(fl.Steps, false)
+	seenColl := map[string]string{}
+	dsType := ""
+	for _, s := range DatasetSteps(fl) {
+		if other, dup := seenColl[s.String("collection")]; dup {
+			add(FileName, s.ID(), "collection %q is also saved by step %s", s.String("collection"), other)
+		}
+		seenColl[s.String("collection")] = s.ID()
+		if t := s.String("type"); t != "" {
+			if dsType == "" {
+				dsType = t
+			} else if t != dsType {
+				add(FileName, s.ID(), "type %q, but another dataset step names %q: one dataset has one type", t, dsType)
+			}
+		}
+	}
 	return out
 }
 
