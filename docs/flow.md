@@ -108,3 +108,10 @@ serves, its models and their output caps, its datasets, namespaces a
 pipeline may never name (`Forbid`), whether it gives value inputs
 (`Values`), and its installed agents and workflows (`Agent`, `Workflow`).
 A host without them refuses steps that need them.
+
+
+A Save as dataset step can use a complete content schema from the pipeline bundle.
+For example, `flow.dataset(id="save", over="rows", collection="notes", schema_file="schemas/notes.json")`
+takes the key, projections, aliases and type from that file. Use one step for
+each collection. The host carries the complete type into the pack, preserving
+projection paths, history, embedding and collection order.

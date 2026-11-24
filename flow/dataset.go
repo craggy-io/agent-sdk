@@ -57,16 +57,17 @@ type DatasetAlias struct {
 // order; 0 in a pack written before orders), and File the pack path
 // of its rows.
 type DatasetCollection struct {
-	Type       string         `json:"type,omitempty"`
-	TypeTitle  string         `json:"type_title,omitempty"`
-	Collection string         `json:"collection"`
-	Key        string         `json:"key"`
-	Fields     []DatasetField `json:"fields"`
-	Aliases    []DatasetAlias `json:"aliases,omitempty"`
-	Text       []string       `json:"text,omitempty"`
-	Order      int            `json:"order,omitempty"`
-	Rows       int            `json:"rows"`
-	File       string         `json:"file"`
+	DeclaredSchema json.RawMessage `json:"declared_schema,omitempty"`
+	Type           string          `json:"type,omitempty"`
+	TypeTitle      string          `json:"type_title,omitempty"`
+	Collection     string          `json:"collection"`
+	Key            string          `json:"key"`
+	Fields         []DatasetField  `json:"fields"`
+	Aliases        []DatasetAlias  `json:"aliases,omitempty"`
+	Text           []string        `json:"text,omitempty"`
+	Order          int             `json:"order,omitempty"`
+	Rows           int             `json:"rows"`
+	File           string          `json:"file"`
 }
 
 // ParseDatasetFields reads a dataset step's fields argument:
@@ -191,13 +192,16 @@ func datasetProblems(s *Step) []string {
 	if _, err := ParseDatasetAliases(s.String("aliases")); err != nil {
 		out = append(out, err.Error())
 	}
+	if s.String("schema_file") != "" && (s.String("fields") != "" || s.String("aliases") != "" || s.String("text") != "" || s.String("type_title") != "") {
+		out = append(out, "a schema_file supplies the fields, aliases, text, and type title")
+	}
 	fields, err := ParseDatasetFields(s.String("fields"))
 	if err != nil {
 		out = append(out, err.Error())
 		return out
 	}
 	key := s.String("key")
-	if key == "" {
+	if key == "" && s.String("schema_file") == "" {
 		out = append(out, "a dataset collection needs a key: the field its rows are told apart by")
 	} else {
 		for _, f := range fields {
@@ -235,7 +239,7 @@ func ReadDatasetFiles(files map[string]string) ([]DatasetCollection, error) {
 		if p != want {
 			return nil, fmt.Errorf("%s declares collection %q; its file should be %s", p, c.Collection, want)
 		}
-		if !collectionName.MatchString(c.Collection) || c.Key == "" || len(c.Fields) == 0 {
+		if !collectionName.MatchString(c.Collection) || c.Key == "" || (len(c.Fields) == 0 && len(c.DeclaredSchema) == 0) {
 			return nil, fmt.Errorf("%s: a collection needs a name, a key and fields", p)
 		}
 		if c.Type != "" && !datasetTypeRef.MatchString(c.Type) {

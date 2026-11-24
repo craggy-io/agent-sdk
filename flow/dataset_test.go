@@ -2,6 +2,7 @@ package flow_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -170,5 +171,37 @@ func TestReadDatasetFilesRefuses(t *testing.T) {
 	}
 	if cols, err := flow.ReadDatasetFiles(map[string]string{"README.md": "x"}); err != nil || len(cols) != 0 {
 		t.Errorf("no dataset: %v %v", cols, err)
+	}
+}
+
+func TestDatasetSchemaFile(t *testing.T) {
+	const schema = `{"type":"notes.technique@1","title":"Notes","collections":[{"name":"techniques","key":"info.slug","text":["info.label"],"embed":["info.label"],"history":{"mode":"all"},"fields":{"score":{"type":"int","path":"info.values[*]","reduce":"max","doc":"Peak","index":true}}}]}`
+	source := strings.Replace(datasetSrc, `key = "slug", type = "notes.technique@1", fields = "slug:string, score:float", text = "slug"`, `schema_file = "schemas/notes.json"`, 1)
+	b := flow.Bundle{flow.FileName: source, "schemas/notes.json": schema}
+	if probs := flow.Validate(b, flow.Env{Served: func(string) bool { return true }}); len(probs) > 0 {
+		t.Fatal(probs)
+	}
+	written := map[string]string{}
+	run(t, b, map[string]any{"posts": []map[string]any{{"info": map[string]any{"slug": "one", "values": []int{1, 2}}}}}, func(c called) any {
+		written[c.Args["path"].(string)] = c.Args["text"].(string)
+		return map[string]any{}
+	})
+	cols, err := flow.ReadDatasetFiles(written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := flow.DatasetTypeJSON(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual, want any
+	json.Unmarshal(got, &actual)
+	json.Unmarshal([]byte(schema), &want)
+	if !reflect.DeepEqual(actual, want) {
+		t.Fatalf("type changed: %s", got)
+	}
+	cols[0].Key = "other"
+	if _, err := flow.DatasetTypeJSON(cols); err == nil {
+		t.Fatal("mismatched collection accepted")
 	}
 }

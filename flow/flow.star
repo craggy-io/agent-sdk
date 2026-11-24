@@ -68,8 +68,8 @@ def _save(id, path, text, title = ""):
 def _export(id, over, path, format = "json", fields = "", title = ""):
     return _step("export", id, title, over = over, format = format, path = path, fields = fields)
 
-def _dataset(id, over, collection, key, type = "", type_title = "", fields = "", text = "", aliases = "", title = ""):
-    return _step("dataset", id, title, over = over, collection = collection, key = key, type = type, type_title = type_title, fields = fields, text = text, aliases = aliases)
+def _dataset(id, over, collection, key = "", type = "", type_title = "", fields = "", text = "", aliases = "", title = "", schema_file = ""):
+    return _step("dataset", id, title, over = over, collection = collection, key = key, type = type, type_title = type_title, fields = fields, text = text, aliases = aliases, schema_file = schema_file)
 
 def _call_step(id, capability, args = None, bind = None, out = "", title = ""):
     return _step("call", id, title, capability = capability, args = args or {}, bind = bind or {}, out = out)
@@ -478,15 +478,56 @@ def _dataset_aliases(s):
             fail("step %s: alias %s needs a path" % (s["id"], kind))
     return out
 
-def _dataset_run(s, env, keys, order = 0):
+def _path_values(row, path):
+    values = [row]
+    for part in path.replace("[*]", ".*").split("."):
+        if not part:
+            continue
+        found = []
+        for v in values:
+            if part == "*":
+                if type(v) == "dict":
+                    found.extend(v.values())
+                elif type(v) == "list":
+                    found.extend(v)
+            elif type(v) == "dict" and part in v:
+                found.append(v[part])
+            elif type(v) == "list" and part.isdigit() and int(part) < len(v):
+                found.append(v[int(part)])
+        values = found
+    return values
+
+def _dataset_run(ctx, s, env, keys, order = 0):
     rows = _rows(_get(env, s["over"]))
-    fields = _dataset_fields(s, rows)
-    key = s["key"]
+    shape = None
+    if s.get("schema_file"):
+        shape = json.decode(ctx["files"][s["schema_file"]])
+        matches = [c for c in shape["collections"] if c["name"] == s["collection"]]
+        if len(matches) != 1:
+            fail("step %s: schema must declare collection %s once" % (s["id"], s["collection"]))
+        col = matches[0]
+        key = col["key"]
+        if (s.get("type") and s["type"] != shape["type"]) or (s.get("key") and s["key"] != key):
+            fail("step %s: type or key disagrees with schema file" % s["id"])
+        fields = [{"name": n, "type": f["type"], "index": f.get("index", False)} for n, f in sorted(col.get("fields", {}).items())]
+    else:
+        fields = _dataset_fields(s, rows)
+        key = s["key"]
     seen = {}
     sources = list(keys)
     for r in rows:
-        _dataset_check(s, fields, r)
-        k = r.get(key)
+        if shape:
+            for field in fields:
+                name = field["name"]
+                path = col["fields"][name].get("path") or name
+                for value in _path_values(r, path):
+                    for scalar in (value if type(value) == "list" else [value]):
+                        _dataset_check(s, [field], {name: scalar})
+            values = _path_values(r, key)
+            k = values[0] if len(values) == 1 and type(values[0]) in ("int", "string") else None
+        else:
+            _dataset_check(s, fields, r)
+            k = r.get(key)
         if k == None or str(k) == "":
             fail("step %s: a row has no %s: every dataset row needs its key" % (s["id"], key))
         if str(k) in seen:
@@ -517,6 +558,12 @@ def _dataset_run(s, env, keys, order = 0):
     aliases = _dataset_aliases(s)
     if aliases:
         schema["aliases"] = aliases
+    if shape:
+        schema["declared_schema"] = shape
+        schema["type"] = shape["type"]
+        schema["type_title"] = shape.get("title", "")
+        schema["text"] = col.get("text", [])
+        schema["aliases"] = _dataset_aliases({"aliases": json.encode(col.get("aliases", {})), "id": s["id"]})
     if order:
         schema["order"] = order
     call("core.packs.write@1", path = "datasets/%s.schema.json" % s["collection"], text = json.indent(json.encode(schema), indent = "  ") + "\n", sources = sorted(sources))
@@ -562,7 +609,7 @@ def _leaf(ctx, s, env, keys, order = 0):
         _export_run(s, env, keys)
         return None
     if k == "dataset":
-        _dataset_run(s, env, keys, order)
+        _dataset_run(ctx, s, env, keys, order)
         return None
     if k == "call":
         return _tag(_call_run(s, env), keys)

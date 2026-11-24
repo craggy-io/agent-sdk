@@ -161,6 +161,28 @@ func Validate(b Bundle, env Env) []Problem {
 						add(FileName, id, "%s doesn't exist", str)
 						break
 					}
+					if p.Name == "schema_file" {
+						var header struct {
+							Type        string
+							Collections []struct{ Name, Key string }
+						}
+						if err := json.Unmarshal([]byte(text), &header); err != nil {
+							add(str, id, "invalid content schema: %v", err)
+						} else {
+							found := 0
+							for _, c := range header.Collections {
+								if c.Name == s.String("collection") {
+									found++
+									if c.Key == "" || (s.String("key") != "" && s.String("key") != c.Key) {
+										add(str, id, "collection key differs from its schema")
+									}
+								}
+							}
+							if found != 1 || !datasetTypeRef.MatchString(header.Type) || (s.String("type") != "" && s.String("type") != header.Type) {
+								add(str, id, "dataset type or collection differs from its schema")
+							}
+						}
+					}
 					if p.Name == "schema" {
 						if err := compileSchema(text); err != nil {
 							add(str, id, "the schema doesn't compile: %v", err)
