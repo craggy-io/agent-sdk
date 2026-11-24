@@ -116,6 +116,14 @@ type callAcc struct {
 	args     strings.Builder
 }
 
+const (
+	// maxStreamLineBytes caps one SSE line.
+	maxStreamLineBytes = 4 << 20
+	// maxStreamTotalBytes caps everything one sample may accumulate; the
+	// accumulated text/reasoning/tool-args can never exceed bytes read.
+	maxStreamTotalBytes = 128 << 20
+)
+
 // readStream consumes the SSE body. The idle timer resets on every line
 // received, including ":" keep-alives (§5.3) — lines are read as they
 // arrive, and any line proves the peer sent bytes.
@@ -130,10 +138,28 @@ func readStream(ctx context.Context, cancel context.CancelFunc, body io.Reader, 
 	go func() {
 		r := bufio.NewReader(body)
 		for {
-			line, err := r.ReadString('\n')
-			if line != "" {
+			// Read one line with a hard cap so a hostile endpoint cannot
+			// make one ReadString allocate without bound.
+			var buf []byte
+			var err error
+			for {
+				var frag []byte
+				frag, err = r.ReadSlice('\n')
+				buf = append(buf, frag...)
+				if len(buf) > maxStreamLineBytes {
+					select {
+					case lines <- lineMsg{err: fmt.Errorf("SSE line over %d bytes", maxStreamLineBytes)}:
+					case <-ctx.Done():
+					}
+					return
+				}
+				if err != bufio.ErrBufferFull {
+					break
+				}
+			}
+			if len(buf) > 0 {
 				select {
-				case lines <- lineMsg{line: line}:
+				case lines <- lineMsg{line: string(buf)}:
 				case <-ctx.Done():
 					return
 				}
@@ -161,6 +187,7 @@ func readStream(ctx context.Context, cancel context.CancelFunc, body io.Reader, 
 		genID      string
 		provider   string
 		sawDone    bool
+		streamed   int
 	)
 	emit := func(d model.Delta) {
 		if onDelta != nil {
@@ -280,6 +307,11 @@ loop:
 				break loop // EOF (validators below decide if that is an error)
 			}
 			line := msg.line
+			streamed += len(line)
+			if streamed > maxStreamTotalBytes {
+				cancel()
+				return model.Response{}, fail(&model.Error{Code: "stream_too_large", Message: fmt.Sprintf("provider stream over %d bytes", maxStreamTotalBytes)})
+			}
 			if !timer.Stop() {
 				select {
 				case <-timer.C:

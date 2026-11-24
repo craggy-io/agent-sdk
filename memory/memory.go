@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,11 +45,22 @@ func validPart(kind, s string) error {
 		return fmt.Errorf("memory: %s is required", kind)
 	}
 	for _, r := range s {
-		if r == '/' || r == '\\' || r == 0 {
+		if r == '/' || r == '\\' || r == ':' || r == 0 {
 			return fmt.Errorf("memory: invalid %s %q", kind, s)
 		}
 	}
-	if s == ".." || s == "." {
+	if s == ".." || s == "." || s[len(s)-1] == '.' || s[len(s)-1] == ' ' {
+		return fmt.Errorf("memory: invalid %s %q", kind, s)
+	}
+	// Windows reserved device names are not usable file names.
+	base := s
+	if i := strings.IndexByte(base, '.'); i > 0 {
+		base = base[:i]
+	}
+	switch strings.ToUpper(base) {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
 		return fmt.Errorf("memory: invalid %s %q", kind, s)
 	}
 	return nil
@@ -83,6 +95,12 @@ func (s *MemStore) Put(_ context.Context, ns, key string, value json.RawMessage)
 }
 
 func (s *MemStore) Get(_ context.Context, ns, key string) (Entry, error) {
+	if err := validPart("namespace", ns); err != nil {
+		return Entry{}, err
+	}
+	if err := validPart("key", key); err != nil {
+		return Entry{}, err
+	}
 	s.mu.RLock()
 	e, ok := s.m[id(ns, key)]
 	s.mu.RUnlock()
@@ -93,6 +111,9 @@ func (s *MemStore) Get(_ context.Context, ns, key string) (Entry, error) {
 }
 
 func (s *MemStore) List(_ context.Context, ns string) ([]Entry, error) {
+	if err := validPart("namespace", ns); err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []Entry
@@ -106,6 +127,12 @@ func (s *MemStore) List(_ context.Context, ns string) ([]Entry, error) {
 }
 
 func (s *MemStore) Delete(_ context.Context, ns, key string) error {
+	if err := validPart("namespace", ns); err != nil {
+		return err
+	}
+	if err := validPart("key", key); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	delete(s.m, id(ns, key))
 	s.mu.Unlock()
@@ -152,6 +179,9 @@ func OpenFileStore(dir string) (*FileStore, error) {
 }
 
 func (s *FileStore) flushLocked(ns string) error {
+	if err := validPart("namespace", ns); err != nil {
+		return err
+	}
 	list, _ := s.mem.List(context.Background(), ns)
 	if list == nil {
 		list = []Entry{}

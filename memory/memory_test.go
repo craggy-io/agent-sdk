@@ -46,6 +46,32 @@ func exercise(t *testing.T, s memory.Store) {
 
 func TestMemStore(t *testing.T) { exercise(t, memory.NewMemStore()) }
 
+// Every verb must reject traversal parts, not just Put: FileStore.Delete
+// flushes to <namespace>.json, so an unvalidated namespace there was an
+// arbitrary-.json overwrite.
+func TestTraversalRejectedEverywhere(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "mem")
+	s, err := memory.OpenFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, bad := range []string{"../../x", "..", `a\b`, "c:x", "CON", "a."} {
+		if err := s.Delete(ctx, bad, "k"); err == nil {
+			t.Errorf("Delete ns=%q accepted", bad)
+		}
+		if _, err := s.Get(ctx, bad, "k"); err == nil {
+			t.Errorf("Get ns=%q accepted", bad)
+		}
+		if _, err := s.List(ctx, bad); err == nil {
+			t.Errorf("List ns=%q accepted", bad)
+		}
+		if err := s.Delete(ctx, "ns", bad); err == nil {
+			t.Errorf("Delete key=%q accepted", bad)
+		}
+	}
+}
+
 func TestFileStorePersists(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "mem")
 	s, err := memory.OpenFileStore(dir)

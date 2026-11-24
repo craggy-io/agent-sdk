@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -87,7 +89,7 @@ func (r *Reader) loadLocked() {
 		return
 	}
 	if data, err := os.ReadFile(r.CacheFile); err == nil {
-		if s, err := Verify(data, r.roots()); err == nil {
+		if s, err := Verify(data, r.roots()); err == nil && s.Version >= r.sheet.Version && fresh(s, r.now()) {
 			r.hold(s, "cache")
 		}
 	}
@@ -103,6 +105,9 @@ func (r *Reader) refreshLocked(ctx context.Context) {
 	}
 	if err == nil && s.Version < r.sheet.Version {
 		err = fmt.Errorf("pricesheet: the published sheet is version %d, older than the %d held", s.Version, r.sheet.Version)
+	}
+	if err == nil && !fresh(s, r.now()) {
+		err = fmt.Errorf("pricesheet: the published sheet's time %s is implausible; refusing a possible replay", s.Published)
 	}
 	if err != nil {
 		r.status.Error = err.Error()
@@ -122,10 +127,35 @@ func (r *Reader) hold(s Sheet, source string) {
 	r.status.Source, r.status.Version, r.status.Published = source, s.Version, s.Published
 }
 
+// fresh reports whether a sheet's Published time is plausible: set, not
+// far in the future, and not so old that accepting it over a built-in
+// sheet would amount to a replay of long-stale prices.
+func fresh(s Sheet, now time.Time) bool {
+	if s.Published.IsZero() {
+		return false
+	}
+	if s.Published.After(now.Add(24 * time.Hour)) {
+		return false
+	}
+	return now.Sub(s.Published) <= 180*24*time.Hour
+}
+
 func (r *Reader) fetch(ctx context.Context) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, or(r.Timeout, 5*time.Second))
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, or(r.URL, URL), nil)
+	raw := or(r.URL, URL)
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	loopback := u.Hostname() == "localhost"
+	if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
+		loopback = true
+	}
+	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+		return nil, fmt.Errorf("pricesheet: URL must be https (http only on loopback): %s", raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
 		return nil, err
 	}

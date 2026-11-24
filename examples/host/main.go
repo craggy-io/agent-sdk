@@ -86,7 +86,7 @@ func (errProvider) Model(_ context.Context, id string) (model.ModelInfo, error) 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("host", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	addr := flags.String("addr", ":8080", "HTTP listen address")
+	addr := flags.String("addr", "127.0.0.1:8080", "HTTP listen address (loopback by default: this example has no authentication)")
 	useMCP := flags.Bool("mcp", false, "serve MCP over stdio instead of HTTP")
 	defsDir := flags.String("defs", "", "user definition layer: a tree of bundles replacing built-ins by name; approved promotes install their own bundles here")
 	scripts := flags.String("scripts", "", "capability script bundle (a folder whose bundle.yaml lists capability.script@1 files) to load and hot-reload")
@@ -233,7 +233,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 		return registry.Caller{ID: "user:anonymous", Kind: "user"}
 	}))
-	srv := &http.Server{Addr: *addr, Handler: handler}
+	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

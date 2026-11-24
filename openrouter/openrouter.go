@@ -10,7 +10,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +76,28 @@ func (c *Client) baseURL() string {
 	return strings.TrimRight(c.BaseURL, "/")
 }
 
+// checkBaseURL refuses to send the API key over plaintext or to a
+// non-HTTP URL: https anywhere, http only on loopback (tests/local proxies).
+func (c *Client) checkBaseURL() error {
+	u, err := url.Parse(c.baseURL())
+	if err != nil {
+		return &model.Error{Code: "invalid_request", Message: "openrouter: bad base URL: " + err.Error()}
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme == "http" {
+		host := u.Hostname()
+		if host == "localhost" {
+			return nil
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+	}
+	return &model.Error{Code: "invalid_request", Message: "openrouter: base URL must be https (http only on loopback); refusing to send the API key to " + c.baseURL()}
+}
+
 // BuildRequestBody renders req as the exact OpenRouter body Sample sends
 // (§8, shared with trace replay via trace/query.BuildBody).
 func BuildRequestBody(req model.Request) ([]byte, error) {
@@ -82,6 +106,9 @@ func BuildRequestBody(req model.Request) ([]byte, error) {
 
 // Sample streams one completion (§8). onDelta may be nil.
 func (c *Client) Sample(ctx context.Context, req model.Request, onDelta func(model.Delta)) (model.Response, error) {
+	if err := c.checkBaseURL(); err != nil {
+		return model.Response{}, err
+	}
 	body, err := BuildRequestBody(req)
 	if err != nil {
 		return model.Response{}, err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 
 	"github.com/craggy-io/agent-sdk/config"
 	"github.com/craggy-io/agent-sdk/decide"
@@ -51,12 +52,21 @@ func (s *service) llmCaps() []registry.Capability {
 				eff := config.Resolve(s.h.Config(), nil, in.Profile)
 				p := eff.Profile
 				modelID := p.Model
+				// The model= experiment override is for the host/user, not
+				// for agent callers: an agent must not be able to pick a
+				// pricier model than its profile allows.
 				if in.Model != "" {
+					if c, ok := registry.CallerFrom(ctx); ok && c.Kind == "agent" {
+						return out, registry.Errorf(registry.Denied, "agent callers may not override the profile model")
+					}
 					modelID = in.Model
 				}
 				maxTok := p.MaxOutputTokens
 				if in.MaxOutputTokens > 0 {
 					maxTok = in.MaxOutputTokens
+					if p.MaxOutputTokens > 0 && maxTok > p.MaxOutputTokens {
+						maxTok = p.MaxOutputTokens
+					}
 				}
 				var items []model.Item
 				if in.System != "" {
@@ -123,6 +133,24 @@ func (s *service) llmCaps() []registry.Capability {
 	}
 }
 
+// memNS binds a caller-supplied namespace to the calling agent: an agent
+// caller only ever reaches namespaces prefixed with its own identity, so
+// one agent cannot read or delete another's memory by naming its
+// namespace. Host/user callers keep the raw namespace (they own the store).
+func memNS(ctx context.Context, ns string) string {
+	c, ok := registry.CallerFrom(ctx)
+	if !ok || c.Kind != "agent" || c.ID == "" {
+		return ns
+	}
+	id := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, c.ID)
+	return id + "~" + ns
+}
+
 // memoryCaps expose the memory store. Values are arbitrary JSON;
 // namespaces let hosts scope memory per agent, thread or project.
 func (s *service) memoryCaps() []registry.Capability {
@@ -134,7 +162,7 @@ func (s *service) memoryCaps() []registry.Capability {
 				Key       string          `json:"key"`
 				Value     json.RawMessage `json:"value"`
 			}) (memory.Entry, error) {
-				e, err := s.mem.Put(ctx, in.Namespace, in.Key, in.Value)
+				e, err := s.mem.Put(ctx, memNS(ctx, in.Namespace), in.Key, in.Value)
 				if err != nil {
 					return memory.Entry{}, invalid("%v", err)
 				}
@@ -145,7 +173,7 @@ func (s *service) memoryCaps() []registry.Capability {
 				Namespace string `json:"namespace"`
 				Key       string `json:"key"`
 			}) (memory.Entry, error) {
-				e, err := s.mem.Get(ctx, in.Namespace, in.Key)
+				e, err := s.mem.Get(ctx, memNS(ctx, in.Namespace), in.Key)
 				if err != nil {
 					return memory.Entry{}, registry.WrapCode(registry.NotFound, err)
 				}
@@ -155,7 +183,7 @@ func (s *service) memoryCaps() []registry.Capability {
 			func(ctx context.Context, in struct {
 				Namespace string `json:"namespace"`
 			}) ([]memory.Entry, error) {
-				list, err := s.mem.List(ctx, in.Namespace)
+				list, err := s.mem.List(ctx, memNS(ctx, in.Namespace))
 				if list == nil {
 					list = []memory.Entry{}
 				}
@@ -166,7 +194,7 @@ func (s *service) memoryCaps() []registry.Capability {
 				Namespace string `json:"namespace"`
 				Key       string `json:"key"`
 			}) (map[string]any, error) {
-				if err := s.mem.Delete(ctx, in.Namespace, in.Key); err != nil {
+				if err := s.mem.Delete(ctx, memNS(ctx, in.Namespace), in.Key); err != nil {
 					return nil, coded(err)
 				}
 				return map[string]any{"deleted": true}, nil

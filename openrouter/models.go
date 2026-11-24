@@ -41,6 +41,9 @@ func (c *Client) Model(ctx context.Context, id string) (model.ModelInfo, error) 
 }
 
 func (c *Client) fetchModelsLocked(ctx context.Context) error {
+	if err := c.checkBaseURL(); err != nil {
+		return err
+	}
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/models", nil)
 	if err != nil {
 		return err
