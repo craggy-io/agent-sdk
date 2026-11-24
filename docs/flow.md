@@ -45,13 +45,21 @@ problems := flow.Validate(b, flow.Env{Host: "Craggy Studio", Served: served, For
   with `_`. A nested value is written as JSON in its cell. Every item's
   input key is a source of the file.
 - `dataset` saves a list of items as one collection of a dataset the run
-  produces: typed rows keyed by its `key` field, written through
+  produces: whole rows keyed by its `key` field, written through
   `core.packs.write@1` as `datasets/<collection>.jsonl` with a
   `datasets/<collection>.schema.json` declaring the collection (its
   `type` — one per dataset, shared by every dataset step — key, fields
-  and text fields). `fields` names each field and type
-  (`"slug:string, score:float"`, one of `FieldTypes`); left empty, the
-  fields and types are read from the items. A row with no key, two rows
+  and text fields). The declared fields are projections over the rows:
+  undeclared fields (nested ones included) ride along whole, as the
+  engine that holds dataset rows keeps them. `fields` names each field
+  and type (`"slug:string, score:float"`, one of `FieldTypes`; a third
+  part, `"pack:string:index"`, indexes the field); left empty, the
+  fields and types are read from the items. `type_title` titles the
+  dataset type (so a host generating it never borrows the pack's
+  title), `aliases` names cross-source link keys as a JSON object
+  (`{"cwe": {"path": "cwe", "pattern": "CWE-[0-9]+"}}`), and each
+  collection's declaration records its order among the dataset's
+  collections, in step order. A row with no key, two rows
   sharing one, or a value of the wrong kind fails the step. A host
   reads a pack's dataset back with `ReadDatasetFiles`.
 - `call` calls any capability the host serves: `args` are fixed

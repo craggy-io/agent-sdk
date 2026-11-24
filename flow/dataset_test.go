@@ -31,7 +31,7 @@ func TestDatasetWritesRowsAndSchema(t *testing.T) {
 		t.Fatalf("problems: %v", probs)
 	}
 	rows := flow.Keyed([]map[string]any{
-		{"slug": "heap", "score": 0.9, "extra": "left out"},
+		{"slug": "heap", "score": 0.9, "extra": "carried whole"},
 		{"slug": "xml", "score": 1},
 	}, "slug")
 	written := map[string]string{}
@@ -39,7 +39,9 @@ func TestDatasetWritesRowsAndSchema(t *testing.T) {
 		written[c.Args["path"].(string)] = c.Args["text"].(string)
 		return map[string]any{}
 	})
-	if got := written["datasets/techniques.jsonl"]; got != "{\"slug\":\"heap\",\"score\":0.9}\n{\"slug\":\"xml\",\"score\":1}\n" {
+	// A row is a whole record: undeclared fields ride along, the
+	// run's _key bookkeeping doesn't.
+	if got := written["datasets/techniques.jsonl"]; got != "{\"extra\":\"carried whole\",\"score\":0.9,\"slug\":\"heap\"}\n{\"score\":1,\"slug\":\"xml\"}\n" {
 		t.Errorf("rows:\n%s", got)
 	}
 	cols, err := flow.ReadDatasetFiles(written)
@@ -58,6 +60,55 @@ func TestDatasetWritesRowsAndSchema(t *testing.T) {
 	}
 	if len(c.Text) != 1 || c.Text[0] != "slug" {
 		t.Errorf("text: %v", c.Text)
+	}
+	if c.Order != 1 {
+		t.Errorf("order: %d, want 1 (the step order)", c.Order)
+	}
+}
+
+// The declared-schema vocabulary: index flags, aliases and the type
+// title ride from the step into the collection's declaration, so a
+// host can generate a dataset type field-for-field as declared.
+func TestDatasetDeclaresIndexesAliasesAndTitle(t *testing.T) {
+	// The key (slug) and the text field are row paths, not declared
+	// fields, as in a craggy.dataset@1 type: declaring the fields
+	// "cwe, score" under key slug is fine.
+	src := strings.NewReplacer(
+		`type = "notes.technique@1"`, `type = "notes.technique@1", type_title = "Technique notes"`,
+		`fields = "slug:string, score:float"`, `fields = "cwe:string:index, score:float", aliases = "{\"cwe\": {\"path\": \"cwe\", \"pattern\": \"CWE-[0-9]+\"}, \"url\": \"url\"}"`,
+	).Replace(datasetSrc)
+	b := flow.Bundle{flow.FileName: src}
+	if probs := flow.Validate(b, flow.Env{Served: func(string) bool { return true }}); len(probs) > 0 {
+		t.Fatalf("problems: %v", probs)
+	}
+	written := map[string]string{}
+	run(t, b, map[string]any{"posts": flow.Keyed([]map[string]any{{"slug": "a", "score": 1, "cwe": "CWE-89", "nested": map[string]any{"x": 1}}}, "slug")}, func(c called) any {
+		written[c.Args["path"].(string)] = c.Args["text"].(string)
+		return map[string]any{}
+	})
+	if !strings.Contains(written["datasets/techniques.jsonl"], `"nested":{"x":1}`) {
+		t.Errorf("a nested undeclared field was dropped:\n%s", written["datasets/techniques.jsonl"])
+	}
+	cols, err := flow.ReadDatasetFiles(written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cols[0]
+	if c.TypeTitle != "Technique notes" || !c.Fields[0].Index || c.Fields[1].Index {
+		t.Errorf("collection: %+v", c)
+	}
+	if len(c.Aliases) != 2 || c.Aliases[0] != (flow.DatasetAlias{Kind: "cwe", Path: "cwe", Pattern: "CWE-[0-9]+"}) || c.Aliases[1] != (flow.DatasetAlias{Kind: "url", Path: "url"}) {
+		t.Errorf("aliases: %+v", c.Aliases)
+	}
+	for from, to := range map[string]string{
+		`fields = "slug:string, score:float"`:                `fields = "slug:string:sorted"`,
+		`text = "slug")`:                                     `text = "slug", aliases = "{\"cwe\": {\"pattern\": \"x\"}}")`,
+		`fields = "slug:string, score:float", text = "slug"`: `fields = "slug:string, score:float", text = "slug", aliases = "not json"`,
+	} {
+		bad := flow.Bundle{flow.FileName: strings.Replace(datasetSrc, from, to, 1)}
+		if probs := flow.Validate(bad, flow.Env{}); len(probs) == 0 {
+			t.Errorf("%s: no problem reported", to)
+		}
 	}
 }
 
@@ -87,7 +138,6 @@ func TestDatasetIsChecked(t *testing.T) {
 		from, to, want string
 	}{
 		{`fields = "slug:string, score:float"`, `fields = "slug:uuid"`, `type "uuid" isn't one of`},
-		{`key = "slug", type`, `key = "nope", type`, `key "nope" isn't one of the fields named`},
 		{`collection = "techniques"`, `collection = "Bad Name"`, `isn't a collection name`},
 		{`type = "notes.technique@1"`, `type = "noversion"`, `isn't a dataset type`},
 		{`fields = "slug:string, score:float"`, `fields = "slug:float"`, `a key is a string or an int`},

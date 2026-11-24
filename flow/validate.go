@@ -271,7 +271,7 @@ func Validate(b Bundle, env Env) []Problem {
 	}
 	check(fl.Steps, false)
 	seenColl := map[string]string{}
-	dsType := ""
+	dsType, dsTitle := "", ""
 	for _, s := range DatasetSteps(fl) {
 		if other, dup := seenColl[s.String("collection")]; dup {
 			add(FileName, s.ID(), "collection %q is also saved by step %s", s.String("collection"), other)
@@ -282,6 +282,13 @@ func Validate(b Bundle, env Env) []Problem {
 				dsType = t
 			} else if t != dsType {
 				add(FileName, s.ID(), "type %q, but another dataset step names %q: one dataset has one type", t, dsType)
+			}
+		}
+		if title := s.String("type_title"); title != "" {
+			if dsTitle == "" {
+				dsTitle = title
+			} else if title != dsTitle {
+				add(FileName, s.ID(), "type title %q, but another dataset step titles the type %q: one dataset type has one title", title, dsTitle)
 			}
 		}
 	}

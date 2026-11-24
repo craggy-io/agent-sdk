@@ -68,8 +68,8 @@ def _save(id, path, text, title = ""):
 def _export(id, over, path, format = "json", fields = "", title = ""):
     return _step("export", id, title, over = over, format = format, path = path, fields = fields)
 
-def _dataset(id, over, collection, key, type = "", fields = "", text = "", title = ""):
-    return _step("dataset", id, title, over = over, collection = collection, key = key, type = type, fields = fields, text = text)
+def _dataset(id, over, collection, key, type = "", type_title = "", fields = "", text = "", aliases = "", title = ""):
+    return _step("dataset", id, title, over = over, collection = collection, key = key, type = type, type_title = type_title, fields = fields, text = text, aliases = aliases)
 
 def _call_step(id, capability, args = None, bind = None, out = "", title = ""):
     return _step("call", id, title, capability = capability, args = args or {}, bind = bind or {}, out = out)
@@ -416,13 +416,19 @@ def _export_run(s, env, keys):
 # --- dataset: a list of items as one typed, keyed collection ---
 
 def _dataset_fields(s, rows):
-    """The collection's fields: as declared (name:type), else read from the rows."""
+    """The collection's fields: as declared (name:type, name:type:index), else read from the rows."""
     named = [f.strip() for f in s.get("fields", "").split(",") if f.strip()]
     if named:
         out = []
         for f in named:
-            name, _, typ = f.partition(":")
-            out.append({"name": name.strip(), "type": typ.strip() or "string"})
+            name, _, rest = f.partition(":")
+            typ, _, flag = rest.partition(":")
+            if flag and flag.strip() != "index":
+                fail("step %s: field %s: %r isn't a field flag (index is the only one)" % (s["id"], name.strip(), flag.strip()))
+            field = {"name": name.strip(), "type": typ.strip() or "string"}
+            if flag:
+                field["index"] = True
+            out.append(field)
         return out
     out = []
     types = {}
@@ -450,10 +456,31 @@ def _dataset_check(s, fields, r):
         if not ok:
             fail("step %s: field %s is declared %s but holds a %s" % (s["id"], f["name"], want, t))
 
-def _dataset_run(s, env, keys):
+def _dataset_aliases(s):
+    """The collection's aliases: a JSON object {"kind": {"path": ..., "pattern": ...}} (a bare string is a path), as a dataset type spells them."""
+    raw = s.get("aliases", "").strip()
+    if not raw:
+        return []
+    named = json.decode(raw)
+    if type(named) != "dict":
+        fail("step %s: aliases is a JSON object of alias kinds" % s["id"])
+    out = []
+    for kind in sorted(named):
+        v = named[kind]
+        if type(v) == "string":
+            out.append({"kind": kind, "path": v})
+        elif type(v) == "dict" and v.get("path"):
+            alias = {"kind": kind, "path": v["path"]}
+            if v.get("pattern"):
+                alias["pattern"] = v["pattern"]
+            out.append(alias)
+        else:
+            fail("step %s: alias %s needs a path" % (s["id"], kind))
+    return out
+
+def _dataset_run(s, env, keys, order = 0):
     rows = _rows(_get(env, s["over"]))
     fields = _dataset_fields(s, rows)
-    cols = [f["name"] for f in fields]
     key = s["key"]
     seen = {}
     sources = list(keys)
@@ -469,7 +496,13 @@ def _dataset_run(s, env, keys):
             if sk not in sources:
                 sources.append(sk)
     path = "datasets/%s.jsonl" % s["collection"]
-    call("core.packs.write@1", path = path, text = _encode("jsonl", rows, cols), sources = sorted(sources))
+
+    # A dataset row is a whole record: the declared fields are
+    # projections over it, so undeclared fields ride along (nested
+    # ones included), as the engine that holds the rows keeps them.
+    # Only the _-prefixed bookkeeping a run carries is left out.
+    text = _lines([json.encode({k: v for k, v in r.items() if type(k) != "string" or not k.startswith("_")}) for r in rows])
+    call("core.packs.write@1", path = path, text = text, sources = sorted(sources))
     schema = {
         "type": s.get("type", ""),
         "collection": s["collection"],
@@ -479,6 +512,13 @@ def _dataset_run(s, env, keys):
         "rows": len(rows),
         "file": path,
     }
+    if s.get("type_title"):
+        schema["type_title"] = s["type_title"]
+    aliases = _dataset_aliases(s)
+    if aliases:
+        schema["aliases"] = aliases
+    if order:
+        schema["order"] = order
     call("core.packs.write@1", path = "datasets/%s.schema.json" % s["collection"], text = json.indent(json.encode(schema), indent = "  ") + "\n", sources = sorted(sources))
 
 def _output(s):
@@ -493,7 +533,7 @@ def _output(s):
 def _count(v):
     return len(v) if type(v) == "list" else 1
 
-def _leaf(ctx, s, env, keys):
+def _leaf(ctx, s, env, keys, order = 0):
     """Runs one step that isn't a For each and returns what it outputs."""
     k = s["kind"]
     if k == "read":
@@ -522,7 +562,7 @@ def _leaf(ctx, s, env, keys):
         _export_run(s, env, keys)
         return None
     if k == "dataset":
-        _dataset_run(s, env, keys)
+        _dataset_run(s, env, keys, order)
         return None
     if k == "call":
         return _tag(_call_run(s, env), keys)
@@ -573,13 +613,21 @@ def _each(ctx, s, env):
 def _run(ctx, steps):
     """Runs a flow. Returns the variables it made, for tests and the Code tab."""
     env = {}
+    datasets = 0
     for s in steps:
         if s["kind"] == "for_each":
             _emit({"step": s["id"]})
             _each(ctx, s, env)
             continue
         _emit({"step": s["id"]})
-        out = _leaf(ctx, s, env, [])
+        order = 0
+        if s["kind"] == "dataset":
+            # A collection's place among its dataset's collections,
+            # in step order, so the type a host generates from the
+            # pack stands as the pipeline declared it.
+            datasets += 1
+            order = datasets
+        out = _leaf(ctx, s, env, [], order)
         if s["kind"] == "approve" and not out:
             _emit({"stopped": s["id"]})
             break
