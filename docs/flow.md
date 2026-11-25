@@ -97,7 +97,10 @@ A host gives a run:
 
 It reads progress from the run's `print()` lines with `ReadEvent`: a step
 starting (with the item and its input keys inside a For each) or done with
-the count it made.
+the count it made. For nested For each steps, `items` gives the item index
+at each depth from outermost to innermost; `item` remains the immediate index.
+Nested outputs are gathered into a flat list after each loop, and output
+lineage includes the keys from all enclosing items.
 
 `CallKey` is a call's content address (capability and canonical input):
 what a host keys a run's answers by, as Studio's step cache and the

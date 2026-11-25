@@ -124,8 +124,8 @@ func Validate(b Bundle, env Env) []Problem {
 	}
 	vars := map[string]bool{}
 	ids := map[string]bool{}
-	var check func(steps []*Step, inLoop bool)
-	check = func(steps []*Step, inLoop bool) {
+	var check func(steps []*Step, vars map[string]bool, inLoop bool)
+	check = func(steps []*Step, vars map[string]bool, inLoop bool) {
 		for _, s := range steps {
 			id := s.ID()
 			if ids[id] {
@@ -279,19 +279,30 @@ func Validate(b Bundle, env Env) []Problem {
 				add(FileName, id, "ask a person outside a For each: one question for the run")
 			}
 			if s.Kind == "for_each" {
-				if inLoop {
-					add(FileName, id, "a For each inside a For each is not supported yet")
+				child := make(map[string]bool, len(vars)+1)
+				for name := range vars {
+					child[name] = true
 				}
-				vars[s.String("item")] = true
-				check(s.Steps(), true)
-				delete(vars, s.String("item"))
+				child[s.String("item")] = true
+				check(s.Steps(), child, true)
+				var outputs func([]*Step)
+				outputs = func(steps []*Step) {
+					for _, step := range steps {
+						if step.Kind == "for_each" {
+							outputs(step.Steps())
+						} else if name := step.Output(); name != "" {
+							vars[name] = true
+						}
+					}
+				}
+				outputs(s.Steps())
 			}
 			if o := s.Output(); o != "" {
 				vars[o] = true
 			}
 		}
 	}
-	check(fl.Steps, false)
+	check(fl.Steps, vars, false)
 	seenColl := map[string]string{}
 	dsType, dsTitle := "", ""
 	for _, s := range DatasetSteps(fl) {

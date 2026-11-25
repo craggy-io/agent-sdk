@@ -22,8 +22,10 @@ const EventPrefix = "flow:"
 // Event is one progress line: a step starting (Step, with Item and Keys
 // inside a For each) or done (Done, with the Count it made).
 type Event struct {
-	Step  string   `json:"step,omitempty"`
-	Item  *int     `json:"item,omitempty"`
+	Step string `json:"step,omitempty"`
+	Item *int   `json:"item,omitempty"`
+	// Items is the outer-to-inner item path; Item remains the immediate index.
+	Items []int    `json:"items,omitempty"`
 	Keys  []string `json:"keys,omitempty"`
 	Done  string   `json:"done,omitempty"`
 	Count int      `json:"count,omitempty"`

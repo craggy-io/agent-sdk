@@ -621,41 +621,89 @@ def _leaf(ctx, s, env, keys, order = 0):
         return s["fn"](env)
     fail("unknown step kind %r" % k)
 
+def _loop_outputs(steps):
+    """Names a loop gathers, including outputs made by nested loops."""
+    names = []
+    pending = list(steps)
+    while pending:
+        step = pending.pop(0)
+        if step["kind"] == "for_each":
+            pending = list(step["steps"]) + pending
+        else:
+            name = _output(step)
+            if name and name not in names:
+                names.append(name)
+    return names
+
+def _each_frame(s, env, path, sources):
+    return {
+        "step": s, "env": env, "path": path, "sources": sources,
+        "items": _get(env, s["over"]), "i": 0, "j": 0,
+        "child": None, "keys": [], "gathered": {}, "counts": {},
+        "outputs": _loop_outputs(s["steps"]),
+    }
+
 def _each(ctx, s, env):
-    """A For each: its steps once per item, outputs gathered by name."""
-    gathered = {}
-    items = _get(env, s["over"])
-    for i, item in enumerate(items):
-        child = dict(env)
-        child[s["item"]] = item
-        keys = _keys_of(item)
-        for inner in s["steps"]:
-            if inner["kind"] == "for_each":
-                fail("step %s: a For each inside a For each is not supported yet" % inner["id"])
-            _emit({"step": inner["id"], "item": i, "keys": keys})
-            out = _leaf(ctx, inner, child, keys)
+    """Runs nested For each steps using frames; Starlark forbids recursion."""
+    stack = [_each_frame(s, env, [], [])]
+    while stack:
+        frame = stack[-1]
+        step = frame["step"]
+        items = frame["items"]
+        i = frame["i"]
+        if i == len(items):
+            for name in frame["outputs"]:
+                frame["env"][name] = frame["gathered"].get(name, [])
+            totals = dict(frame["counts"])
+            for inner in step["steps"]:
+                name = _output(inner)
+                count = len(frame["env"][name]) if name else totals.get(inner["id"], len(items))
+                totals[inner["id"]] = count
+                _emit({"done": inner["id"], "count": count})
+            for id, count in totals.items():
+                if id not in [inner["id"] for inner in step["steps"]]:
+                    _emit({"done": id, "count": count})
+            totals[step["id"]] = len(items)
+            _emit({"done": step["id"], "count": len(items)})
+            stack.pop()
+            if stack:
+                parent = stack[-1]
+                for id, count in totals.items():
+                    parent["counts"][id] = parent["counts"].get(id, 0) + count
+                parent["j"] += 1
+            continue
+        if frame["child"] == None:
+            item = items[i]
+            frame["child"] = dict(frame["env"])
+            frame["child"][step["item"]] = item
+            frame["keys"] = list(frame["sources"])
+            for key in _keys_of(item):
+                if key not in frame["keys"]:
+                    frame["keys"].append(key)
+            frame["j"] = 0
+        if frame["j"] == len(step["steps"]):
+            for name in frame["outputs"]:
+                if name not in frame["gathered"]:
+                    frame["gathered"][name] = []
+                v = frame["child"][name]
+                if type(v) == "list":
+                    frame["gathered"][name].extend(v)
+                else:
+                    frame["gathered"][name].append(v)
+            frame["i"] += 1
+            frame["child"] = None
+            continue
+        inner = step["steps"][frame["j"]]
+        path = frame["path"] + [i]
+        _emit({"step": inner["id"], "item": i, "items": path, "keys": frame["keys"]})
+        if inner["kind"] == "for_each":
+            stack.append(_each_frame(inner, frame["child"], path, frame["keys"]))
+        else:
+            out = _leaf(ctx, inner, frame["child"], frame["keys"])
             name = _output(inner)
             if name:
-                child[name] = out
-        for inner in s["steps"]:
-            name = _output(inner)
-            if not name:
-                continue
-            if name not in gathered:
-                gathered[name] = []
-            v = child[name]
-            if type(v) == "list":
-                gathered[name].extend(v)
-            else:
-                gathered[name].append(v)
-    for inner in s["steps"]:
-        name = _output(inner)
-        if name:
-            env[name] = gathered.get(name, [])
-            _emit({"done": inner["id"], "count": len(env[name])})
-        else:
-            _emit({"done": inner["id"], "count": len(items)})
-    _emit({"done": s["id"], "count": len(items)})
+                frame["child"][name] = out
+            frame["j"] += 1
 
 def _run(ctx, steps):
     """Runs a flow. Returns the variables it made, for tests and the Code tab."""
