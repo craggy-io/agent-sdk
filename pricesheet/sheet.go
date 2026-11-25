@@ -164,7 +164,7 @@ func (s Sheet) Check() error {
 		if !contains(slots, name) {
 			add("unknown slot %q", name)
 		}
-		if unit := s.Models[name].PriceUnit; unit != "" && unit != "characters" && unit != "seconds" {
+		if unit := s.Models[name].PriceUnit; unit != "" && unit != "characters" && unit != "seconds" && unit != "provider" {
 			add("%s has unknown price unit %q", name, unit)
 		}
 	}
