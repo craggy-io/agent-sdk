@@ -16,22 +16,24 @@ const Format = "craggy.prices@1"
 // URL is where the sheet is published.
 const URL = "https://prices.craggy.io/v1/sheet.json"
 
-// The slots a sheet names a model for. Low, Med and High are tiers the
-// operator may swap at will; Embed is pinned, because vectors from different
-// models can't be compared.
+// The slots a sheet names a model for. Low, Med and High are general tiers;
+// Decision and Audio are purpose-specific defaults. Embed is pinned because
+// vectors from different models can't be compared.
 const (
-	Low   = "low"
-	Med   = "med"
-	High  = "high"
-	Embed = "embed"
+	Low      = "low"
+	Med      = "med"
+	High     = "high"
+	Decision = "decision"
+	Audio    = "audio"
+	Embed    = "embed"
 )
 
 // Tiers are the swappable slots, cheapest first.
 var Tiers = []string{Low, Med, High}
 
-var slots = []string{Low, Med, High, Embed}
+var slots = []string{Low, Med, High, Decision, Audio, Embed}
 
-// Model is the model behind a slot, with its price per million tokens.
+// Model is the model behind a slot, with its price per million billed units.
 type Model struct {
 	// ID is the provider's ID for it (OpenRouter's, e.g. anthropic/claude-sonnet-5.5).
 	ID         string  `json:"id"`
@@ -42,13 +44,25 @@ type Model struct {
 	Context   int  `json:"context,omitempty"`
 	MaxOutput int  `json:"max_output,omitempty"`
 	Pinned    bool `json:"pinned,omitempty"`
+	// Empty means tokens; speech models may bill characters or seconds.
+	PriceUnit string `json:"price_unit,omitempty"`
 }
 
 // InUSDPerToken is the input price of one token.
-func (m Model) InUSDPerToken() float64 { return m.InUSDPerM / 1e6 }
+func (m Model) InUSDPerToken() float64 {
+	if m.PriceUnit != "" {
+		return 0
+	}
+	return m.InUSDPerM / 1e6
+}
 
 // OutUSDPerToken is the output price of one token.
-func (m Model) OutUSDPerToken() float64 { return m.OutUSDPerM / 1e6 }
+func (m Model) OutUSDPerToken() float64 {
+	if m.PriceUnit != "" {
+		return 0
+	}
+	return m.OutUSDPerM / 1e6
+}
 
 // Cost is what one unit of a resource costs, e.g. gcp.run.vcpu_second.
 type Cost struct {
@@ -69,8 +83,17 @@ type Sheet struct {
 	Costs     map[string]Cost  `json:"costs"`
 }
 
-// Tier returns the model behind a slot. Every checked sheet has all four.
-func (s Sheet) Tier(slot string) Model { return s.Models[slot] }
+// Tier returns the model behind a slot. Older signed sheets predate the
+// purpose-specific slots, so those use the built-in choice until republished.
+func (s Sheet) Tier(slot string) Model {
+	if m, ok := s.Models[slot]; ok {
+		return m
+	}
+	if slot == Decision || slot == Audio {
+		return Builtin().Models[slot]
+	}
+	return Model{}
+}
 
 // Cost returns a resource's cost.
 func (s Sheet) Cost(key string) (Cost, bool) {
@@ -117,7 +140,9 @@ func (s Sheet) Check() error {
 	if s.Version < 0 {
 		add("version is negative")
 	}
-	for _, slot := range slots {
+	// Decision and Audio are optional in legacy signed sheets. A reader
+	// supplies their built-in defaults after verifying the old signature.
+	for _, slot := range []string{Low, Med, High, Embed} {
 		m, ok := s.Models[slot]
 		switch {
 		case !ok:
@@ -130,9 +155,17 @@ func (s Sheet) Check() error {
 			add("embed must be pinned")
 		}
 	}
+	for _, slot := range []string{Decision, Audio} {
+		if m, ok := s.Models[slot]; ok && (m.ID == "" || m.InUSDPerM < 0 || m.OutUSDPerM < 0) {
+			add("%s needs a model id and non-negative prices", slot)
+		}
+	}
 	for _, name := range sortedKeys(s.Models) {
 		if !contains(slots, name) {
 			add("unknown slot %q", name)
+		}
+		if unit := s.Models[name].PriceUnit; unit != "" && unit != "characters" && unit != "seconds" {
+			add("%s has unknown price unit %q", name, unit)
 		}
 	}
 	for _, key := range sortedKeys(s.Costs) {

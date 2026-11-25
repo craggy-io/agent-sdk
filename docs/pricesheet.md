@@ -10,6 +10,8 @@ publishes the choice with current prices as one signed file at
 | Slot | Meaning |
 | --- | --- |
 | `low`, `med`, `high` | Tiers, cheapest first. The operator swaps their models at will. |
+| `decision` | Checked decisions made for a subsystem or pipeline. |
+| `audio` | The default text-to-speech model for voice replies. |
 | `embed` | The embedding model. Pinned: vectors from different models can't be compared. |
 
 ```go
@@ -25,7 +27,8 @@ sheet.Profiles(&cfg)                // fast = low, default = med, deep = high
 
 - **Always a sheet.** Before the first fetch, and whenever nothing better is
   held, a Reader holds `Builtin()`, compiled into this module (version 0). A
-  failed fetch keeps what is held and shows in `Status()`.
+  failed fetch keeps what is held and shows in `Status()`. Older signed sheets
+  without `decision` and `audio` use the built-in choices until republished.
 - **Signed.** A fetched file is used only if its Ed25519 signature checks
   against `TrustedRoots()`. The signature covers `craggy/pricesheet/v1\n` and
   the sheet's exact bytes, so it can't be confused with an event-log head.

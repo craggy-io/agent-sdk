@@ -1,7 +1,7 @@
 // Package pricesheet reads the Craggy price sheet: which model sits behind each
 // tier, and what models and cloud resources cost us.
 //
-// Services ask for a tier (Low, Med, High) or the pinned Embed slot, never a
+// Services ask for a tier (Low, Med, High), Decision or Audio default, or the pinned Embed slot, never a
 // model ID. The operator picks the model behind each in craggy-manager; a job
 // publishes the choice with current prices as one signed JSON file at URL
 // (craggy-manager docs/model-tiers.md).
@@ -19,6 +19,6 @@
 // again). A Reader is safe for concurrent use; Current fetches inside the call,
 // never in the background, so a Cloud Run host refreshes during a request.
 //
-// Exported names: Sheet, Model, Cost, Low, Med, High, Embed, Tiers, Format,
+// Exported names: Sheet, Model, Cost, Low, Med, High, Decision, Audio, Embed, Tiers, Format,
 // URL, Sign, Verify, ErrUntrusted, Builtin, TrustedRoots, Reader, Status.
 package pricesheet

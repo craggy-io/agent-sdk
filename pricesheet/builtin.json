@@ -6,6 +6,8 @@
     "low": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
     "med": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
     "high": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
+    "decision": {"id": "meta/muse-spark-1.3-contributor", "title": "Muse Spark 1.3", "in_usd_per_m": 0.10, "out_usd_per_m": 0.20, "context": 1048576, "max_output": 32000},
+    "audio": {"id": "x-ai/grok-voice-tts-1.0", "title": "Grok Voice TTS 1.0", "in_usd_per_m": 15, "out_usd_per_m": 0, "context": 15000, "price_unit": "characters"},
     "embed": {"id": "openai/text-embedding-3-small", "title": "Embeddings (small)", "in_usd_per_m": 0.02, "out_usd_per_m": 0, "pinned": true}
   },
   "costs": {

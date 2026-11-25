@@ -87,5 +87,12 @@ func Verify(data []byte, roots []eventlog.Key) (Sheet, error) {
 	if err := sheet.Check(); err != nil {
 		return Sheet{}, fmt.Errorf("%w: %v", ErrUntrusted, err)
 	}
+	// Earlier signed sheets had only the three general tiers and embedding.
+	// The signature was checked over their original bytes above.
+	for _, slot := range []string{Decision, Audio} {
+		if _, ok := sheet.Models[slot]; !ok {
+			sheet.Models[slot] = Builtin().Models[slot]
+		}
+	}
 	return sheet, nil
 }

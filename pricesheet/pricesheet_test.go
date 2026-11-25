@@ -43,6 +43,27 @@ func TestBuiltin(t *testing.T) {
 	if s.Version != 0 {
 		t.Fatalf("builtin version %d, want 0 so any published sheet wins", s.Version)
 	}
+	if s.Tier(Decision).ID == "" || s.Tier(Audio).ID != "x-ai/grok-voice-tts-1.0" || s.Tier(Audio).PriceUnit != "characters" {
+		t.Fatalf("purpose-specific defaults: %+v %+v", s.Tier(Decision), s.Tier(Audio))
+	}
+}
+
+func TestLegacySheetGetsNewDefaultsAfterVerification(t *testing.T) {
+	signer, key := testKey(t, "legacy")
+	legacy := sheetV(1)
+	delete(legacy.Models, Decision)
+	delete(legacy.Models, Audio)
+	data, err := Sign(t.Context(), signer, legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Verify(data, []eventlog.Key{key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier(Decision).ID != Builtin().Tier(Decision).ID || got.Tier(Audio).ID != Builtin().Tier(Audio).ID {
+		t.Fatalf("legacy defaults: %+v", got.Models)
+	}
 }
 
 func TestTrustedRoots(t *testing.T) {
