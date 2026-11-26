@@ -38,7 +38,7 @@ func (s *Host) RunAgent(ctx context.Context, nameOrDef any, task string, opts ..
 // With a nodeCtx the caller is an agent, so the delegate allowlist applies
 // exactly as in Spawn: agents.run must not be a way around Delegates.
 func (s *Host) ExecAgent(ctx context.Context, spec ExecSpec) (Result, error) {
-	if nc, inNode := nodeCtxFrom(ctx); inNode {
+	if nc, inNode := s.ownNode(ctx); inNode {
 		if err := requireDelegate(nc, specName(spec)); err != nil {
 			return Result{}, err
 		}
@@ -96,7 +96,7 @@ func (s *Host) WithWorkflow(_ flowbridge.Engine, ctx context.Context, name, id s
 	if s.isClosed() {
 		return fmt.Errorf("host: closed")
 	}
-	parent, inRun := nodeCtxFrom(ctx)
+	parent, inRun := s.ownNode(ctx)
 	top := !inRun
 	if top {
 		run := s.newRun(ctx)

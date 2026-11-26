@@ -152,6 +152,7 @@ func WithSettings(settings map[string]any) RunOption {
 // runState is one run tree: config snapshot, shared budget, semaphore (§11).
 type runState struct {
 	id     string
+	host   *Host // the host whose run it is
 	cfg    config.SessionConfig
 	budget *runBudget
 	sem    *semaphore
@@ -165,10 +166,23 @@ func (s *Host) newRun(_ context.Context) *runState {
 	cfg := s.Config() // snapshot once per run (§3)
 	capN := cfg.Limits.Concurrency
 	return &runState{
-		id: model.NewID(), cfg: cfg,
+		id: model.NewID(), host: s, cfg: cfg,
 		budget: newRunBudget(cfg.Limits),
 		sem:    newSemaphore(capN),
 	}
+}
+
+// ownNode is the node ctx carries when it is one of this host's runs. A
+// node of another host (an agent whose tool call opened this host, as a
+// pipeline step's agent is opened from the assistant's) is not this host's
+// caller: what starts here starts a run of its own, with this host's
+// budget and allowlists, not as that node's child.
+func (s *Host) ownNode(ctx context.Context) (*nodeCtx, bool) {
+	nc, ok := nodeCtxFrom(ctx)
+	if !ok || nc.run == nil || nc.run.host != s {
+		return nil, false
+	}
+	return nc, true
 }
 
 // nodeCtx is the execution lineage carried in ctx: run, depth, caller

@@ -108,7 +108,7 @@ func (hs *handleStore) all() []*handle {
 // close) only handles it owns, and may message, inspect and wait on any
 // handle in its own conversation.
 func (s *Host) RequireAgentAccess(ctx context.Context, h *handle, control bool) error {
-	nc, inNode := nodeCtxFrom(ctx)
+	nc, inNode := s.ownNode(ctx)
 	if !inNode {
 		return nil // root caller
 	}
@@ -171,7 +171,7 @@ func (s *Host) Spawn(ctx context.Context, spec SpawnSpec) (HandleInfo, error) {
 	if s.isClosed() {
 		return HandleInfo{}, model.Errorf(model.CodeCancelled, "session_closed", "host: closed")
 	}
-	nc, inNode := nodeCtxFrom(ctx)
+	nc, inNode := s.ownNode(ctx)
 	name := specName(spec.ExecSpec)
 	owner, conv := s.root.ID, conversationFrom(ctx)
 	var parent *nodeCtx
@@ -323,7 +323,7 @@ func (s *Host) sendToHandle(ctx context.Context, h *handle, req SendRequest) (Re
 	if err := s.RequireAgentAccess(ctx, h, req.Interrupt); err != nil {
 		return Receipt{State: ReceiptRejected, Code: "forbidden"}, err
 	}
-	nc, inNode := nodeCtxFrom(ctx)
+	nc, inNode := s.ownNode(ctx)
 	if inNode && nc.handleID == h.id {
 		return Receipt{State: ReceiptRejected, Code: "forbidden"}, model.Errorf(model.CodeInvalid, "self_message", "host: an agent cannot message itself")
 	}
@@ -496,7 +496,7 @@ type WaitResult struct {
 func (s *Host) Wait(ctx context.Context, handleIDs []string, timeout time.Duration) ([]WaitResult, error) {
 	deadline := time.Now().Add(timeout)
 	inbox := callerInbox(ctx)
-	nc, inNode := nodeCtxFrom(ctx)
+	nc, inNode := s.ownNode(ctx)
 	out := make([]WaitResult, len(handleIDs))
 	for i, id := range handleIDs {
 		h, ok := s.handles.get(id)

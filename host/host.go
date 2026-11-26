@@ -509,7 +509,7 @@ func (s *Host) RunWorkflow(ctx context.Context, nameOrSource string, input map[s
 			fmt.Errorf("host: workflow engine not registered (import the workflow package)")
 	}
 	runID := ""
-	if nc, ok := nodeCtxFrom(ctx); ok {
+	if nc, ok := s.ownNode(ctx); ok {
 		runID = nc.run.id
 	} else {
 		run := s.newRun(ctx)

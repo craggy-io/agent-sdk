@@ -181,7 +181,7 @@ type Peer struct {
 // Peers lists the agents in the calling node's conversation, itself
 // included and marked. Outside a node it lists every agent.
 func (s *Host) Peers(ctx context.Context) []Peer {
-	nc, inNode := nodeCtxFrom(ctx)
+	nc, inNode := s.ownNode(ctx)
 	var out []Peer
 	for _, inf := range s.ListAgents(ctx) {
 		p := Peer{ID: inf.ID, Kind: "handle", Def: inf.Def, State: inf.State,
