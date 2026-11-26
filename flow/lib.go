@@ -145,9 +145,16 @@ func (in Input) Check() error {
 	return nil
 }
 
+// QuoteColumn is a key that passed Check as a column in a query: quoted,
+// so a column named with a dash (craggy-data's rfcs keys on doc-id) reads
+// as one name. BigQuery and SQLite both take the backticks.
+func QuoteColumn(key string) string { return "`" + key + "`" }
+
+// ident is a column name a key may be: letters, digits, underscores and,
+// after the first, dashes, so it needs no escaping inside backticks.
 func ident(s string) bool {
 	for i, r := range s {
-		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && (r >= '0' && r <= '9' || r == '-')) {
 			return false
 		}
 	}
